@@ -42,6 +42,8 @@
 
     <modules>
         <module>identity-service</module>
+        <module>discovery-server</module>
+        <module>discovery-server</module>
     </modules>
 
 </project>
