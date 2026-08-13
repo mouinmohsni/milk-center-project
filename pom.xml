@@ -43,7 +43,7 @@
     <modules>
         <module>identity-service</module>
         <module>discovery-server</module>
-        <module>discovery-server</module>
+        <module>collection-service</module>
         <module>api-gateway</module>
         <module>collection-service</module>
     </modules>

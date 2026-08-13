@@ -13,10 +13,10 @@ import java.util.List;
 
 
 @Entity
-@Table(name = "users") // Nom de la table en base de données
-@Data // Lombok: génère getters, setters, toString, equals, hashCode
-@NoArgsConstructor // Lombok: génère un constructeur sans arguments
-@AllArgsConstructor // Lombok: génère un constructeur avec tous les arguments
+@Table(name = "users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder // Lombok: permet de construire des objets de manière fluide
 public class User implements UserDetails {
 
