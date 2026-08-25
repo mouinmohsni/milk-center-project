@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails; // Importez cette classe
 
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 
 
@@ -50,6 +51,10 @@ public class User implements UserDetails {
     @Temporal(TemporalType.TIMESTAMP)
     private java.util.Date createdAt = new java.util.Date();
 
+    @Column(name = "updatedAt", nullable = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    private java.util.Date updatedAt = new java.util.Date();
+
 
     // Implémentation des méthodes de UserDetails
 
@@ -86,5 +91,17 @@ public class User implements UserDetails {
     @Override
     public boolean isEnabled() {
         return true;
+    }
+
+    @PrePersist
+    public void prePersist() {
+        Date now = new Date();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = new Date();
     }
 }

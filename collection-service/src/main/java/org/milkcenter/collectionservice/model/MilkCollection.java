@@ -63,10 +63,7 @@ public class MilkCollection {
     @Temporal(TemporalType.TIMESTAMP)
     private Date updatedAt = new Date();
 
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = new Date();
-    }
+
 
     // Méthodes métier
     public void accept() {
@@ -82,4 +79,12 @@ public class MilkCollection {
         this.quantityLiters = newQuantity;
         this.status = CollectionStatus.CORRECTED;
     }
+
+    @PrePersist
+    public void prePersist() {
+        Date now = new Date();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
 }

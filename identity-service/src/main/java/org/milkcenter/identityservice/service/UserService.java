@@ -2,12 +2,14 @@ package org.milkcenter.identityservice.service;
 
 import org.milkcenter.identityservice.model.User;
 import org.milkcenter.identityservice.repository.UserRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import lombok.*;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,19 +58,34 @@ public class UserService implements UserDetailsService {
 
     // --- UPDATE (Mise à jour) ---
     public User updateUser(Long id, User userDetails) {
-        return userRepository.findById(id).map(user -> {
-            user.setFirstName(userDetails.getFirstName());
-            user.setLastName(userDetails.getLastName());
-            user.setPhoneNumber(userDetails.getPhoneNumber());
-            user.setRole(userDetails.getRole());
-            user.setEnabled(userDetails.isEnabled());
-            // On ne met à jour le mot de passe que s'il est fourni
-            if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
-                user.setPassword(passwordEncoder.encode(userDetails.getPassword()));
-            }
-            return userRepository.save(user);
-        }).orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'id " + id));
+        return userRepository.findById(id)
+                .map(existingUser -> {
+                    // Mettre à jour uniquement les champs fournis (non null)
+                    if (userDetails.getFirstName() != null) {
+                        existingUser.setFirstName(userDetails.getFirstName());
+                    }
+                    if (userDetails.getLastName() != null) {
+                        existingUser.setLastName(userDetails.getLastName());
+                    }
+                    if (userDetails.getPhoneNumber() != null) {
+                        existingUser.setPhoneNumber(userDetails.getPhoneNumber());
+                    }
+                    // NE JAMAIS écraser : role, username, isEnabled, createdAt
+                    // Ils gardent automatiquement leurs valeurs existantes
+
+                    // Le mot de passe n'est mis à jour que s'il est fourni
+                    if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
+                        existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
+                    }
+
+                    return userRepository.save(existingUser);
+                })
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Utilisateur non trouvé avec l'id " + id
+                ));
     }
+
 
     // --- DELETE (Suppression) ---
     public void deleteUser(Long id) {
@@ -85,6 +102,8 @@ public class UserService implements UserDetailsService {
         }
         return false;
     }
+
+
 
 
 

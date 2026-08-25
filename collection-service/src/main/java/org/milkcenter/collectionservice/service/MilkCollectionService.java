@@ -142,7 +142,7 @@ public class MilkCollectionService {
     // VALIDATE — Accepter, rejeter ou corriger une collecte
     // ============================================
     public MilkCollectionResponse validateCollection(Long id, CollectionValidationRequest request) {
-
+        System.out.println("request :" + request);
         MilkCollection collection = collectionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -150,13 +150,14 @@ public class MilkCollectionService {
                 ));
 
         // Vérifier que la collecte est bien en PENDING (on ne peut valider qu'une fois)
-        if (collection.getStatus() != CollectionStatus.PENDING) {
+        if (collection.getStatus() != CollectionStatus.PENDING && collection.getStatus() != CollectionStatus.CORRECTED) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "La collecte a déjà été validée (statut actuel: " + collection.getStatus() + "). " +
                             "Seules les collectes PENDING peuvent être validées."
             );
         }
+        System.out.println("request.getStatus()========"+request.getStatus());
 
         // Appliquer l'action selon le statut demandé
         switch (request.getStatus()) {
@@ -171,6 +172,7 @@ public class MilkCollectionService {
 
             case CORRECTED:
                 // La quantité corrigée est obligatoire pour CORRECTED
+
                 if (request.getQuantityLiters() == null) {
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST,
@@ -178,6 +180,7 @@ public class MilkCollectionService {
                     );
                 }
                 collection.correctQuantity(request.getQuantityLiters());
+                System.out.println("request.getQuantityLiters()========"+request.getQuantityLiters());
                 // Ajouter le motif en note si fourni
                 if (request.getNotes() != null) {
                     String existingNotes = collection.getNotes() != null ? collection.getNotes() : "";

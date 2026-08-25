@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.util.Date;
+
 
 @Entity
 @Table(name = "farmers")
@@ -47,6 +49,20 @@ public class FarmerProfile {
     @Column(name = "updatedAt", nullable = false)
     @Temporal(TemporalType.TIMESTAMP)
     private java.util.Date updatedAt = new java.util.Date();
+
+
+    @PrePersist
+    public void prePersist() {
+        Date now = new Date();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = new Date();
+    }
+
 
 
 }
