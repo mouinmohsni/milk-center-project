@@ -2,10 +2,8 @@ package org.milkcenter.collectionservice.model;
 
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+
 import org.milkcenter.collectionservice.enums.CollectionStatus;
 
 import java.math.BigDecimal;
@@ -92,5 +90,11 @@ public class MilkCollection {
         this.createdAt = now;
         this.updatedAt = now;
     }
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = new Date();
+    }
+
 
 }

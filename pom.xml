@@ -46,6 +46,7 @@
         <module>collection-service</module>
         <module>api-gateway</module>
         <module>collection-service</module>
+        <module>fleet-service</module>
     </modules>
 
 </project>
