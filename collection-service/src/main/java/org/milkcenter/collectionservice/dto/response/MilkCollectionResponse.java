@@ -20,6 +20,8 @@ public class MilkCollectionResponse {
     private BigDecimal quantityLiters;
     private CollectionStatus status;
     private String notes;
+    private int correctionCount;
+    private Long updatedByUserId;
     private Date createdAt;
     private Date updatedAt;
 }

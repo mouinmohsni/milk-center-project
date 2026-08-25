@@ -150,14 +150,12 @@ public class MilkCollectionService {
                 ));
 
         // Vérifier que la collecte est bien en PENDING (on ne peut valider qu'une fois)
-        if (collection.getStatus() != CollectionStatus.PENDING && collection.getStatus() != CollectionStatus.CORRECTED) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "La collecte a déjà été validée (statut actuel: " + collection.getStatus() + "). " +
-                            "Seules les collectes PENDING peuvent être validées."
-            );
+        if (request.getStatus() == CollectionStatus.CORRECTED && collection.getCorrectionCount() >= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cette collecte a déjà été corrigée une fois. Aucune autre modification n'est permise.");
         }
         System.out.println("request.getStatus()========"+request.getStatus());
+        collection.setUpdatedByUserId(request.getValidatorUserId());
+
 
         // Appliquer l'action selon le statut demandé
         switch (request.getStatus()) {
@@ -182,10 +180,19 @@ public class MilkCollectionService {
                 collection.correctQuantity(request.getQuantityLiters());
                 System.out.println("request.getQuantityLiters()========"+request.getQuantityLiters());
                 // Ajouter le motif en note si fourni
-                if (request.getNotes() != null) {
-                    String existingNotes = collection.getNotes() != null ? collection.getNotes() : "";
-                    collection.setNotes(existingNotes + " [Correction: " + request.getNotes() + "]");
-                }
+                collection.setCorrectionCount(collection.getCorrectionCount() + 1);
+                String existingNotes = (collection.getNotes() == null ? "" : collection.getNotes());
+
+                String newReason = (request.getNotes() != null ? request.getNotes() : "Pas de motif");
+
+                //  On crée la trace d'audit
+                String trace = String.format(" [Correction #%d par User #%d le %s]",
+                        collection.getCorrectionCount(),
+                        request.getValidatorUserId(),
+                        new Date());
+
+                //  On fusionne tout : Ancienne note + Nouveau motif + Trace
+                collection.setNotes(existingNotes + " | Motif: " + newReason + trace);
                 break;
 
             default:
@@ -261,6 +268,8 @@ public class MilkCollectionService {
                 .quantityLiters(collection.getQuantityLiters())
                 .status(collection.getStatus())
                 .notes(collection.getNotes())
+                .correctionCount(collection.getCorrectionCount())
+                .updatedByUserId(collection.getUpdatedByUserId())
                 .createdAt(collection.getCreatedAt())
                 .updatedAt(collection.getUpdatedAt())
                 .build();

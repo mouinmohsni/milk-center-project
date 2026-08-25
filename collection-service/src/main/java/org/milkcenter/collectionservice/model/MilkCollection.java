@@ -50,6 +50,12 @@ public class MilkCollection {
     @Column(name = "notes", length = 500)
     private String notes; // Observations du chauffeur (qualité visuelle, odeur, etc.)
 
+    @Column(name = "correction_count")
+    private Integer  correctionCount = 0 ;
+
+    @Column(name = "updatedByUserId" )
+    private Long updatedByUserId ;
+
     // Clé d'unicité pour éviter les doublons lors de synchronisations mobiles
     @Column(name = "idempotency_key", unique = true, nullable = false, length = 64)
     private String idempotencyKey;

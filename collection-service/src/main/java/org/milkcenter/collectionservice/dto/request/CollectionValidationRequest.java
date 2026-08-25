@@ -22,4 +22,9 @@ public class CollectionValidationRequest {
 
     @Size(max = 200, message = "Le motif ne doit pas dépasser 200 caractères")
     private String notes;
+
+    @NotNull(message = "L'ID de l'utilisateur effectuant l'action est obligatoire")
+    private Long validatorUserId;
+
+
 }
