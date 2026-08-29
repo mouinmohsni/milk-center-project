@@ -1,9 +1,13 @@
 package org.milkcenter.fleetservice.model;
 
+import org.milkcenter.fleetservice.enums.VehicleStatus;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import lombok.*;
 
-import org.milkcenter.fleetservice.enums.VehicleStatus;
+
+
+
 
 import java.util.Date;
 
@@ -27,8 +31,8 @@ public class Vehicle {
     @Column(name = "model")
     private String model ;
 
-    @Column(name = "capacity")
-    private Double capacity ;
+    @Column(name = "capacity", precision = 10, scale = 2)
+    private BigDecimal capacity ;
 
     @Column(name = "km")
     private Long km ;
@@ -38,13 +42,16 @@ public class Vehicle {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
+    @Builder.Default
     private VehicleStatus status = VehicleStatus.READY;
 
     @Column(name = "created_at", nullable = false, updatable = false)
+    @Builder.Default
     @Temporal(TemporalType.TIMESTAMP)
     private Date createdAt = new Date();
 
     @Column(name = "updated_at", nullable = false)
+    @Builder.Default
     @Temporal(TemporalType.TIMESTAMP)
     private Date updatedAt = new Date();
 

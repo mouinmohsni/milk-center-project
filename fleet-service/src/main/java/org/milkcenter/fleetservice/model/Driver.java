@@ -23,7 +23,7 @@ public class Driver {
     @Column(name = "user_id", nullable=false)
     private Long userId ;
 
-    @Column(name = "license_number")
+    @Column(name = "license_number",unique = true)
     private String licenseNumber ;
 
     @Column(name = "salary")
@@ -31,14 +31,17 @@ public class Driver {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
+    @Builder.Default
     private DriverStatus status = DriverStatus.AVAILABLE ;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Temporal(TemporalType.TIMESTAMP)
+    @Builder.Default
     private Date createdAt = new Date();
 
     @Column(name = "updated_at", nullable = false)
     @Temporal(TemporalType.TIMESTAMP)
+    @Builder.Default
     private Date updatedAt = new Date();
 
 

@@ -25,12 +25,11 @@ public class Route {
     @Column(name = "name")
     private String name ;
 
-    // Remplacez Long driverId par :
     @ManyToOne
     @JoinColumn(name = "driver_id")
     private Driver driver;
 
-    // Remplacez Long vehicleId par :
+
     @ManyToOne
     @JoinColumn(name = "vehicle_id")
     private Vehicle vehicle;
@@ -40,21 +39,26 @@ public class Route {
     private Date plannedDate ;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status")
-    private RouteStatus status = RouteStatus.ACTIVE ;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    @Temporal(TemporalType.TIMESTAMP)
-    private Date createdAt = new Date();
-
-    @Column(name = "updated_at", nullable = false)
-    @Temporal(TemporalType.TIMESTAMP)
-    private Date updatedAt = new Date();
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private RouteStatus status = RouteStatus.PLANNED;
 
     @ToString.Exclude
     @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequenceOrder ASC") // Les arrêts seront toujours triés !
     private List<RouteStop> stops = new ArrayList<>();
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    @Builder.Default
+    private Date createdAt = new Date();
+
+    @Column(name = "updated_at", nullable = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    @Builder.Default
+    private Date updatedAt = new Date();
+
+
 
 
 

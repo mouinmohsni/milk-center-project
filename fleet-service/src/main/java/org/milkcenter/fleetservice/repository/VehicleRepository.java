@@ -9,4 +9,7 @@ public interface VehicleRepository extends JpaRepository <Vehicle , Long> {
 
     Optional<Vehicle> findByLicensePlate(String licensePlate);
 
+    boolean existsByLicensePlate(String licensePlate);
+
+
 }
