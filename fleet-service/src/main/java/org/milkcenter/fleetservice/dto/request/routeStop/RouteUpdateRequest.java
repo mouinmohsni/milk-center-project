@@ -1,23 +1,16 @@
-package org.milkcenter.fleetservice.dto.request;
-
-
+package org.milkcenter.fleetservice.dto.request.routeStop;
 
 import lombok.*;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import org.milkcenter.fleetservice.enums.RouteStatus;
 
-
-
-import java.util.*;
-
-
+import java.util.Date;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RouteRequest {
+public class RouteUpdateRequest {
 
     @NotBlank(message = "Le nom est obligatoire")
     private String name;
@@ -31,9 +24,7 @@ public class RouteRequest {
     @FutureOrPresent(message = "La date doit être aujourd'hui ou dans le futur")
     private Date plannedDate;
 
-    private RouteStatus status;
 
-    @Valid
+
     private List<RouteStopRequest> stops;
 }
-
