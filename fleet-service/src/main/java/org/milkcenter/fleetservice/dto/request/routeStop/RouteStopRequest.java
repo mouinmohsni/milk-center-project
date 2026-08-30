@@ -1,8 +1,9 @@
-package org.milkcenter.fleetservice.dto.request;
+package org.milkcenter.fleetservice.dto.request.routeStop;
 
 
-import lombok.*;
 import jakarta.validation.constraints.*;
+import lombok.*;
+
 
 import java.time.LocalTime;
 
@@ -10,15 +11,16 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RouteStopUpdateRequest {
+public class RouteStopRequest {
 
     private Long routeId;
 
     @NotNull(message = "L'ID du férmier est obligatoire")
     private  Long farmerId ;
 
-    @Positive(message = "L'ordre de séquence doit être supérieur à zéro")
+    @Positive
     private  Integer sequenceOrder ;
 
     private LocalTime plannedTime ;
+
 }

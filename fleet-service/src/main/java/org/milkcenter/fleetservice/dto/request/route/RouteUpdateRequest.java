@@ -1,7 +1,8 @@
-package org.milkcenter.fleetservice.dto.request.routeStop;
+package org.milkcenter.fleetservice.dto.request.route;
 
 import lombok.*;
 import jakarta.validation.constraints.*;
+import org.milkcenter.fleetservice.dto.request.routeStop.RouteStopRequest;
 
 import java.util.Date;
 import java.util.List;
@@ -24,7 +25,4 @@ public class RouteUpdateRequest {
     @FutureOrPresent(message = "La date doit être aujourd'hui ou dans le futur")
     private Date plannedDate;
 
-
-
-    private List<RouteStopRequest> stops;
 }

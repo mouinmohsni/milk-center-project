@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.milkcenter.fleetservice.dto.request.route.RouteRequest;
 import org.milkcenter.fleetservice.dto.request.route.RouteStatusUpdateRequest;
+import org.milkcenter.fleetservice.dto.request.route.RouteUpdateRequest;
 import org.milkcenter.fleetservice.dto.response.RouteResponse;
 
 import org.milkcenter.fleetservice.enums.RouteStatus;
@@ -142,7 +143,7 @@ public class RouteService {
      */
     public RouteResponse updateRoute(
             Long id,
-            RouteRequest request
+            RouteUpdateRequest request
     ) {
         Route route = findRouteById(id);
 
