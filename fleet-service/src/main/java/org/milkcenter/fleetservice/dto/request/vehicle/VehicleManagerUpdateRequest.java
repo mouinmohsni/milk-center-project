@@ -1,4 +1,4 @@
-package org.milkcenter.fleetservice.dto.request;
+package org.milkcenter.fleetservice.dto.request.vehicle;
 
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;

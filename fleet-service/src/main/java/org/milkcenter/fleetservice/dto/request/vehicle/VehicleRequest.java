@@ -1,4 +1,4 @@
-package org.milkcenter.fleetservice.dto.request;
+package org.milkcenter.fleetservice.dto.request.vehicle;
 
 import org.milkcenter.fleetservice.enums.VehicleStatus;
 import jakarta.validation.constraints.*;
@@ -20,6 +20,7 @@ public class VehicleRequest {
     @NotBlank(message = "Le modèle du véhicule est obligatoire")
     private String model;
 
+    @NotNull(message = "La capacité est obligatoire")
     @Positive(message = "La capacité doit être supérieure à zéro")
     private BigDecimal capacity;
 
