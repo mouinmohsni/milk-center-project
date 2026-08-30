@@ -32,5 +32,12 @@ public interface RouteExecutionRepository
     List<RouteExecution> findByActualVehicle_IdOrderByExecutionDateDesc(
             Long vehicleId
     );
+
+    boolean existsByRoute_IdAndExecutionDateAndIdNot(
+            Long routeId,
+            Date executionDate,
+            Long executionId
+    );
+
 }
 

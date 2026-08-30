@@ -1,7 +1,6 @@
-package org.milkcenter.fleetservice.dto.request;
+package org.milkcenter.fleetservice.dto.request.routeExecution;
 
 import jakarta.validation.constraints.FutureOrPresent;
-import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,5 +22,4 @@ public class RouteExecutionUpdateRequest {
 
     private Long actualVehicleId;
 
-    private RouteExecutionStatus status;
 }
