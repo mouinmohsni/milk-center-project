@@ -16,6 +16,15 @@ spring:
           uri: lb://collection-service
           predicates:
             - Path=/api/farmers/**,/api/collections/**
+          filters:
+            - AuthenticationFilter
+
+        - id: fleet-service
+          uri: lb://fleet-service
+          predicates:
+            - Path=/api/drivers/**, /api/vehicles/**, /api/routes/**, /api/route-stops/**, /api/route-executions/**
+          filters:
+            - AuthenticationFilter
 
 eureka:
   client:
