@@ -1,5 +1,9 @@
 package org.milkcenter.identityservice.service;
 
+import org.milkcenter.identityservice.dto.request.RoleUpdateRequest;
+import org.milkcenter.identityservice.dto.request.UserRegisterRequest;
+import org.milkcenter.identityservice.dto.request.UserUpdateRequest;
+import org.milkcenter.identityservice.enums.Role;
 import org.milkcenter.identityservice.model.User;
 import org.milkcenter.identityservice.repository.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -10,7 +14,10 @@ import lombok.*;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.server.ResponseStatusException;
+import org.milkcenter.identityservice.dto.response.UserResponse;
 
+
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,44 +30,80 @@ public class UserService implements UserDetailsService {
 
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Optional<User> userDetail = userRepository.findByUsername(username);
+    public UserDetails loadUserByUsername(String username)
+            throws UsernameNotFoundException {
 
-        // Convertir notre User en UserDetails de Spring Security
-        return userDetail.map(user -> new org.springframework.security.core.userdetails.User(
-                        user.getUsername(),
-                        user.getPassword(),
-                        user.getAuthorities() // Assurez-vous que votre User model a getAuthorities()
-                ))
-                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé : " + username));
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "Utilisateur non trouvé : " + username
+                ));
     }
 
 
-    public User registerUser(User user) {
-        // 1. Hacher le mot de passe avant la sauvegarde
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
 
-        // 2. Sauvegarder l'utilisateur en base
-        return userRepository.save(user);
+    public UserResponse registerUser(UserRegisterRequest request) {
+
+
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Le username " + request.getUsername()
+                            + " est déjà utilisé"
+            );
+        }
+
+        if (request.getPhoneNumber() != null
+                && !request.getPhoneNumber().isBlank()
+                && userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Le numéro de téléphone "
+                            + request.getPhoneNumber()
+                            + " est déjà utilisé"
+            );
+        }
+        User newUser = new User();
+
+        newUser.setUsername(request.getUsername());
+        newUser.setFirstName(request.getFirstName());
+        newUser.setLastName(request.getLastName());
+        newUser.setPhoneNumber(request.getPhoneNumber());
+
+        // Le rôle de l'inscription publique est défini côté serveur.
+        newUser.setRole(Role.FARMER);
+
+        // Le mot de passe doit être encodé avant la sauvegarde.
+        newUser.setPassword(
+                passwordEncoder.encode(request.getPassword())
+        );
+
+        User savedUser = userRepository.save(newUser);
+        return mapToResponse(savedUser);
     }
 
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
-    public Optional<User> getUserById(Long id) {
-        return userRepository.findById(id);
+
+    public Optional<UserResponse> getUserById(Long id) {
+        return userRepository.findById(id)
+                .map(this::mapToResponse);
     }
+
 
     public Optional<User> getUserByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
-    // --- UPDATE (Mise à jour) ---
-    public User updateUser(Long id, User userDetails) {
-        return userRepository.findById(id)
-                .map(existingUser -> {
-                    // Mettre à jour uniquement les champs fournis (non null)
+
+
+    public UserResponse updateUser(Long id, UserUpdateRequest userDetails) {
+        User existingUser =findUserById(id);
+
                     if (userDetails.getFirstName() != null) {
                         existingUser.setFirstName(userDetails.getFirstName());
                     }
@@ -70,39 +113,96 @@ public class UserService implements UserDetailsService {
                     if (userDetails.getPhoneNumber() != null) {
                         existingUser.setPhoneNumber(userDetails.getPhoneNumber());
                     }
-                    // NE JAMAIS écraser : role, username, isEnabled, createdAt
-                    // Ils gardent automatiquement leurs valeurs existantes
+
 
                     // Le mot de passe n'est mis à jour que s'il est fourni
                     if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
                         existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
                     }
 
-                    return userRepository.save(existingUser);
-                })
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Utilisateur non trouvé avec l'id " + id
-                ));
+                    User update = userRepository.save(existingUser);
+        return mapToResponse(update);
+    }
+
+    public UserResponse updateUserRole(Long id, RoleUpdateRequest userDetails) {
+        User existingUser =findUserById(id);
+
+        if (userDetails.getRole() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Le rôle est obligatoire"
+            );
+        }
+
+        existingUser.setRole(userDetails.getRole());
+        User update = userRepository.save(existingUser);
+        return mapToResponse(update);
     }
 
 
+
+
+
     // --- DELETE (Suppression) ---
-    public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+    public void hardDeleteUser(Long id) {
+        User user = findUserById(id);
+
+        userRepository.delete(user);
+    }
+
+    public void softDeleteUser(Long id) {
+        User user = findUserById(id);
+
+        user.setEnabled(false);
+
+        userRepository.save(user);
     }
 
     // --- LOGIN LOGIC (Vérification des identifiants) ---
     public boolean verifyLogin(String username, String rawPassword) {
         Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            // On compare le mot de passe saisi avec le hash en base
-            return passwordEncoder.matches(rawPassword, user.getPassword());
+
+        if (userOpt.isEmpty()) {
+            return false;
         }
-        return false;
+
+        User user = userOpt.get();
+
+        // Un compte désactivé ne peut pas se connecter.
+        if (!user.isEnabled()) {
+            return false;
+        }
+
+        // Comparaison du mot de passe saisi avec le mot de passe haché.
+        return passwordEncoder.matches(
+                rawPassword,
+                user.getPassword()
+        );
     }
 
+
+
+    private User findUserById(Long id ){
+        return userRepository.findById(id).orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Aucun user trouvé avec l'ID : " + id
+
+        ));
+    }
+
+    private UserResponse mapToResponse(User user) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .phoneNumber(user.getPhoneNumber())
+                .role(user.getRole())
+                .enabled(user.isEnabled())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
+    }
 
 
 

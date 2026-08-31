@@ -51,16 +51,18 @@ public class User implements UserDetails {
     @Temporal(TemporalType.TIMESTAMP)
     private java.util.Date createdAt = new java.util.Date();
 
-    @Column(name = "updatedAt", nullable = false)
+    @Column(name = "updated_at", nullable = false)
     @Temporal(TemporalType.TIMESTAMP)
-    private java.util.Date updatedAt = new java.util.Date();
+    @Builder.Default
+    private Date updatedAt = new Date();
+
 
 
     // Implémentation des méthodes de UserDetails
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority(role.name()));
+        return List.of(new SimpleGrantedAuthority("ROLE_"+role.name()));
     }
 
     @Override
@@ -92,6 +94,7 @@ public class User implements UserDetails {
     public boolean isEnabled() {
         return this.isEnabled;
     }
+
 
     @PrePersist
     public void prePersist() {
