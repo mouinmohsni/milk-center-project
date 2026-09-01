@@ -5,101 +5,71 @@ import org.milkcenter.collectionservice.dto.request.FarmerProfileRequest;
 import org.milkcenter.collectionservice.dto.response.FarmerProfileResponse;
 import org.milkcenter.collectionservice.model.FarmerProfile;
 import org.milkcenter.collectionservice.repository.FarmerRepository;
-
-import org.springframework.stereotype.Service;
+import org.milkcenter.collectionservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-
 @Service
 @RequiredArgsConstructor
 public class FarmerService {
 
-    private final FarmerRepository farmerRepository ;
+    private final FarmerRepository farmerRepository;
+    private final CurrentUserService currentUserService;
 
+    private void checkFarmerOwnership(FarmerProfile farmer ) {
+        String role = currentUserService.getCurrentRole();
+        Long connectedUserId = currentUserService.getCurrentUserId();
 
-    // ============================================
-    // READ — Récupérer tous les agriculteurs
-    // ============================================
-    public List<FarmerProfileResponse> getAllFarmer() {
-        return farmerRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    // ============================================
-    // READ — Récupérer tous les agriculteurs actifs
-    // ============================================
-    public List<FarmerProfileResponse> getAllFarmerActive() {
-        return farmerRepository.findByActiveTrue()
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    // ============================================
-    // READ — Récupérer un agriculteur par ID
-    // ============================================
-    public FarmerProfileResponse  getOneFarmer(Long id){
-        FarmerProfile farmer = farmerRepository.findById(id).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Agriculteur non trouvé avec  ID: " + id
-        ));
-        return mapToResponse(farmer);
-    }
-
-    // ============================================
-    // READ — Récupérer un agriculteur par user ID
-    // ============================================
-    public FarmerProfileResponse  findByUserId(Long userId){
-
-        FarmerProfile farmer = farmerRepository.findByUserId(userId).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Agriculteur non trouvé avec  user ID: " + userId
-        ));
-        return mapToResponse(farmer);
-    }
-
-    // ============================================
-    // READ — Récupérer un agriculteur par farmName
-    // ============================================
-    public FarmerProfileResponse findByFarmName(String farmName){
-        FarmerProfile farmer = farmerRepository.findByFarmName(farmName).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Agriculteur non trouvé avec  le nom: " + farmName
-        ));
-        return mapToResponse(farmer);
-    }
-
-
-    // ============================================
-    // READ — Récupérer un agriculteur par adresse
-    // ============================================
-    public List<FarmerProfileResponse> findByAddress(String address) {
-        return farmerRepository.findByAddress(address)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    // ============================================
-    // CREATE — Créer un nouveau profil agriculteur
-    // ============================================
-    public FarmerProfileResponse createFarmer(FarmerProfileRequest request ) {
-
-        // Vérifier si un profil existe déjà pour ce userId
-        if (farmerRepository.existsByUserId(request.getUserId())) {
+        if ("FARMER".equals(role) && !farmer.getUserId().equals(connectedUserId)) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Un profil existe déjà pour l'utilisateur ID: " + request.getUserId()
+                    HttpStatus.FORBIDDEN,
+                    "Vous n'avez pas le droit d'accéder à ce profil"
             );
         }
+    }
 
-        // Convertir le DTO en entité
+    public List<FarmerProfileResponse> getAllFarmer() {
+        return farmerRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public FarmerProfileResponse getOneFarmer(Long id) {
+        FarmerProfile farmer = farmerRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agriculteur non trouvé"));
+        checkFarmerOwnership(farmer);
+        return mapToResponse(farmer);
+    }
+
+    public FarmerProfileResponse findByUserId(Long userId) {
+        FarmerProfile farmer = farmerRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profil agriculteur non trouvé"));
+        checkFarmerOwnership(farmer);
+        return mapToResponse(farmer);
+    }
+
+    public FarmerProfileResponse findByFarmName(String farmName) {
+        FarmerProfile farmer = farmerRepository.findByFarmName(farmName)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ferme non trouvée"));
+        return mapToResponse(farmer);
+    }
+
+    public List<FarmerProfileResponse> findByAddress(String address) {
+        // Adaptation pour retourner une liste comme attendu par le contrôleur
+        return farmerRepository.findByAddress(address).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public FarmerProfileResponse createFarmer(FarmerProfileRequest request) {
+        if (farmerRepository.existsByUserId(request.getUserId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Un profil existe déjà pour cet utilisateur");
+        }
+
         FarmerProfile farmer = FarmerProfile.builder()
                 .userId(request.getUserId())
                 .farmName(request.getFarmName())
@@ -107,69 +77,33 @@ public class FarmerService {
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .herdSize(request.getHerdSize())
+                .active(true)
                 .build();
 
-        // Sauvegarder en base
-        FarmerProfile saved = farmerRepository.save(farmer);
-
-        // Retourner le DTO Response
-        return mapToResponse(saved);
+        return mapToResponse(farmerRepository.save(farmer));
     }
 
-    // ============================================
-    // UPDATE — Modifier un profil agriculteur
-    // ============================================
     public FarmerProfileResponse updateFarmer(Long id, FarmerProfileRequest request) {
-
         FarmerProfile farmer = farmerRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Agriculteur non trouvé avec ID: " + id
-                ));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agriculteur non trouvé"));
+        checkFarmerOwnership(farmer);
 
-        // Vérifier que le userId n'est pas changé vers un autre agriculteur existant
-        if (!farmer.getUserId().equals(request.getUserId())) {
-            if (farmerRepository.existsByUserId(request.getUserId())) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Le userId " + request.getUserId() + " est déjà utilisé par un autre agriculteur"
-                );
-            }
-        }
-
-        // Mettre à jour les champs
         farmer.setFarmName(request.getFarmName());
         farmer.setAddress(request.getAddress());
         farmer.setLatitude(request.getLatitude());
         farmer.setLongitude(request.getLongitude());
         farmer.setHerdSize(request.getHerdSize());
-        // Ne pas toucher à userId, active, createdAt
 
-        // Sauvegarder (le @PreUpdate mettra à jour updatedAt automatiquement)
-        FarmerProfile updated = farmerRepository.save(farmer);
-
-        return mapToResponse(updated);
+        return mapToResponse(farmerRepository.save(farmer));
     }
 
-    // ============================================
-    // DELETE (soft) — Désactiver un agriculteur
-    // ============================================
     public FarmerProfileResponse deactivateFarmer(Long id) {
         FarmerProfile farmer = farmerRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Agriculteur non trouvé avec ID: " + id
-                ));
-
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agriculteur non trouvé"));
         farmer.setActive(false);
-        FarmerProfile updated = farmerRepository.save(farmer);
-
-        return mapToResponse(updated);
+        return mapToResponse(farmerRepository.save(farmer));
     }
 
-    // ============================================
-    // Mapper privé — Entité → DTO Response
-    // ============================================
     private FarmerProfileResponse mapToResponse(FarmerProfile farmer) {
         return FarmerProfileResponse.builder()
                 .id(farmer.getId())
@@ -184,6 +118,4 @@ public class FarmerService {
                 .updatedAt(farmer.getUpdatedAt())
                 .build();
     }
-
-
 }

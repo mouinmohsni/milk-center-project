@@ -57,6 +57,7 @@ public class AuthController {
                     ));
 
             String token = jwtService.generateToken(
+                    user.getId(),
                     user.getUsername(),
                     user.getRole().name()
             );

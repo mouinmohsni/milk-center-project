@@ -7,14 +7,13 @@ import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
 import org.milkcenter.collectionservice.enums.CollectionStatus;
 import org.milkcenter.collectionservice.model.MilkCollection;
 import org.milkcenter.collectionservice.repository.MilkCollectionRepository;
+import org.milkcenter.collectionservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,242 +21,140 @@ import java.util.stream.Collectors;
 public class MilkCollectionService {
 
     private final MilkCollectionRepository collectionRepository;
+    private final CurrentUserService currentUserService;
 
-    // ============================================
-    // CREATE — Enregistrer une nouvelle collecte
-    // ============================================
-    public MilkCollectionResponse createCollection(MilkCollectionRequest request ) {
+    private void checkCollectionOwnership(MilkCollection collection ) {
+        String role = currentUserService.getCurrentRole();
+        Long connectedUserId = currentUserService.getCurrentUserId();
 
-        // Vérifier l'idempotence (éviter les doublons)
+        if ("DRIVER".equals(role) && !collection.getDriverUserId().equals(connectedUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Vous n'êtes pas l'auteur de cette collecte");
+        }
+    }
+
+    public MilkCollectionResponse createCollection(MilkCollectionRequest request) {
         if (collectionRepository.existsByIdempotencyKey(request.getIdempotencyKey())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Cette collecte a déjà été enregistrée (idempotency key: " + request.getIdempotencyKey() + ")"
-            );
+            return mapToResponse(collectionRepository.findByIdempotencyKey(request.getIdempotencyKey())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur idempotence")));
         }
 
-        // Convertir le DTO en entité
         MilkCollection collection = MilkCollection.builder()
                 .farmerId(request.getFarmerId())
-                .driverUserId(request.getDriverUserId())
+                .driverUserId(currentUserService.getCurrentUserId())
                 .routeStopId(request.getRouteStopId())
                 .collectedAt(request.getCollectedAt())
                 .quantityLiters(request.getQuantityLiters())
-                // Si le chauffeur n'envoie pas de statut, on met PENDING par défaut
-                .status(request.getStatus() != null ? request.getStatus() : CollectionStatus.PENDING)
+                .temperatureCelsius(request.getTemperatureCelsius())
+                .qualityNotes(request.getQualityNotes())
                 .notes(request.getNotes())
                 .idempotencyKey(request.getIdempotencyKey())
+                .status(CollectionStatus.PENDING)
+                .correctionCount(0)
                 .build();
 
-        // Sauvegarder en base
-        MilkCollection saved = collectionRepository.save(collection);
-
-        return mapToResponse(saved);
+        return mapToResponse(collectionRepository.save(collection));
     }
 
-    // ============================================
-    // READ — Récupérer une collecte par ID
-    // ============================================
+    public List<MilkCollectionResponse> getAllCollections() {
+        return collectionRepository.findAll().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
     public MilkCollectionResponse getCollectionById(Long id) {
         MilkCollection collection = collectionRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Collecte non trouvée avec ID: " + id
-                ));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collecte non trouvée"));
+        checkCollectionOwnership(collection);
         return mapToResponse(collection);
     }
 
-    // ============================================
-    // READ — Lister toutes les collectes
-    // ============================================
-    public List<MilkCollectionResponse> getAllCollections() {
-        return collectionRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-    }
-
-    // ============================================
-    // READ — Toutes les collectes d'un agriculteur
-    // ============================================
     public List<MilkCollectionResponse> getCollectionsByFarmerId(Long farmerId) {
-        return collectionRepository.findByFarmerId(farmerId)
-                .stream()
+        return collectionRepository.findByFarmerId(farmerId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // READ — Collectes d'un agriculteur avec un statut précis
-    // ============================================
-    public List<MilkCollectionResponse> getCollectionsByFarmerIdAndStatus(
-            Long farmerId, CollectionStatus status) {
-        return collectionRepository.findByFarmerIdAndStatus(farmerId, status)
-                .stream()
+    public List<MilkCollectionResponse> getCollectionsByFarmerIdAndStatus(Long farmerId, CollectionStatus status) {
+        return collectionRepository.findByFarmerIdAndStatus(farmerId, status).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // READ — Toutes les collectes d'un chauffeur
-    // ============================================
     public List<MilkCollectionResponse> getCollectionsByDriverId(Long driverUserId) {
-        return collectionRepository.findByDriverUserId(driverUserId)
-                .stream()
+        return collectionRepository.findByDriverUserId(driverUserId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // READ — Collectes d'un arrêt de tournée
-    // ============================================
     public List<MilkCollectionResponse> getCollectionsByRouteStopId(Long routeStopId) {
-        return collectionRepository.findByRouteStopId(routeStopId)
-                .stream()
+        return collectionRepository.findByRouteStopId(routeStopId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // READ — Collectes entre deux dates
-    // ============================================
     public List<MilkCollectionResponse> getCollectionsByPeriod(Date start, Date end) {
-        return collectionRepository.findByCollectedAtBetween(start, end)
-                .stream()
+        return collectionRepository.findByCollectedAtBetween(start, end).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // READ — Collectes d'un agriculteur triées par date (plus récentes d'abord)
-    // ============================================
     public List<MilkCollectionResponse> getLatestCollectionsByFarmerId(Long farmerId) {
-        return collectionRepository.findLatestByFarmerId(farmerId)
-                .stream()
+        return collectionRepository.findLatestByFarmerId(farmerId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    // ============================================
-    // VALIDATE — Accepter, rejeter ou corriger une collecte
-    // ============================================
     public MilkCollectionResponse validateCollection(Long id, CollectionValidationRequest request) {
-        System.out.println("request :" + request);
         MilkCollection collection = collectionRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Collecte non trouvée avec ID: " + id
-                ));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collecte non trouvée"));
 
-        // Vérifier que la collecte est bien en PENDING (on ne peut valider qu'une fois)
-        if (request.getStatus() == CollectionStatus.CORRECTED && collection.getCorrectionCount() >= 1) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cette collecte a déjà été corrigée une fois. Aucune autre modification n'est permise.");
-        }
-        System.out.println("request.getStatus()========"+request.getStatus());
-        collection.setUpdatedByUserId(request.getValidatorUserId());
-
-
-        // Appliquer l'action selon le statut demandé
-        switch (request.getStatus()) {
-            case ACCEPTED:
-                collection.accept();
-                break;
-
-            case REJECTED:
-                String reason = request.getNotes() != null ? request.getNotes() : "Aucun motif fourni";
-                collection.reject(reason);
-                break;
-
-            case CORRECTED:
-                // La quantité corrigée est obligatoire pour CORRECTED
-
-                if (request.getQuantityLiters() == null) {
-                    throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST,
-                            "La quantité corrigée est obligatoire pour le statut CORRECTED"
-                    );
-                }
-                collection.correctQuantity(request.getQuantityLiters());
-                System.out.println("request.getQuantityLiters()========"+request.getQuantityLiters());
-                // Ajouter le motif en note si fourni
-                collection.setCorrectionCount(collection.getCorrectionCount() + 1);
-                String existingNotes = (collection.getNotes() == null ? "" : collection.getNotes());
-
-                String newReason = (request.getNotes() != null ? request.getNotes() : "Pas de motif");
-
-                //  On crée la trace d'audit
-                String trace = String.format(" [Correction #%d par User #%d le %s]",
-                        collection.getCorrectionCount(),
-                        request.getValidatorUserId(),
-                        new Date());
-
-                //  On fusionne tout : Ancienne note + Nouveau motif + Trace
-                collection.setNotes(existingNotes + " | Motif: " + newReason + trace);
-                break;
-
-            default:
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Statut invalide pour la validation. Utilisez ACCEPTED, REJECTED ou CORRECTED"
-                );
+        if (collection.getStatus() != CollectionStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cette collecte a déjà été traitée");
         }
 
-        // Sauvegarder (le @PreUpdate mettra à jour updatedAt)
-        MilkCollection updated = collectionRepository.save(collection);
-        return mapToResponse(updated);
+        collection.setStatus(request.getStatus());
+        collection.setValidatorUserId(currentUserService.getCurrentUserId());
+        collection.setValidationNotes(request.getValidationNotes());
+
+        if (request.getNotes() != null) {
+            collection.setNotes((collection.getNotes() == null ? "" : collection.getNotes()) + " | Validation: " + request.getNotes());
+        }
+
+        if (request.getStatus() == CollectionStatus.CORRECTED) {
+            if (collection.getCorrectionCount() >= 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maximum une seule correction autorisée");
+            }
+            if (request.getQuantityLiters() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La nouvelle quantité est requise pour une correction");
+            }
+            collection.setQuantityLiters(request.getQuantityLiters());
+            collection.setCorrectionCount(collection.getCorrectionCount() + 1);
+            collection.setUpdatedByUserId(currentUserService.getCurrentUserId());
+        }
+
+        return mapToResponse(collectionRepository.save(collection));
     }
 
-    // ============================================
-    // STATISTICS — Total de litres sur une période avec un statut donné
-    // ============================================
-    public BigDecimal getTotalLitersByFarmerAndPeriod(
-            Long farmerId, CollectionStatus status, Date start, Date end) {
-        BigDecimal total = collectionRepository.sumQuantityByFarmerIdAndStatusAndPeriod(
-                farmerId, status, start, end
-        );
-        // SUM() retourne null si aucun résultat → convertir en 0
+    public BigDecimal getTotalLitersByFarmerAndPeriod(Long farmerId, CollectionStatus status, Date start, Date end) {
+        BigDecimal total = collectionRepository.sumQuantityByFarmerIdAndStatusAndPeriod(farmerId, status, start, end);
         return total != null ? total : BigDecimal.ZERO;
     }
 
-    // ============================================
-    // STATISTICS — Total de litres ACCEPTED (tout temps)
-    // ============================================
     public BigDecimal getTotalAcceptedLitersByFarmer(Long farmerId) {
         BigDecimal total = collectionRepository.sumAcceptedQuantityByFarmerId(farmerId);
         return total != null ? total : BigDecimal.ZERO;
     }
 
-    // ============================================
-    // STATISTICS — Répartition des collectes par statut (pour un agriculteur)
-    // ============================================
     public List<Map<String, Object>> getStatisticsByStatus(Long farmerId) {
-        List<Object[]> rows = collectionRepository.countByFarmerIdGroupByStatus(farmerId);
-
-        return rows.stream()
-                .map(row -> Map.of(
-                        "status", row[0].toString(),      // CollectionStatus en String
-                        "count", row[1]                   // Nombre de collectes
-                ))
-                .collect(Collectors.toList());
+        List<Object[]> stats = collectionRepository.countByFarmerIdGroupByStatus(farmerId);
+        return stats.stream().map(row -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("status", row[0]);
+            map.put("count", row[1]);
+            return map;
+        }).collect(Collectors.toList());
     }
 
-    // ============================================
-    // STATISTICS — Première collecte dépassant une quantité
-    // ============================================
-    public MilkCollectionResponse findFirstCollectionAboveQuantity(
-            Long farmerId, BigDecimal quantityLiters) {
-        MilkCollection collection = collectionRepository.findFirstBySupQuantityLiters(
-                farmerId, quantityLiters
-        ).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Aucune collecte dépassant " + quantityLiters + " litres trouvée pour cet agriculteur"
-        ));
-        return mapToResponse(collection);
-    }
-
-    // ============================================
-    // Mapper privé — Entité → DTO Response
-    // ============================================
     private MilkCollectionResponse mapToResponse(MilkCollection collection) {
         return MilkCollectionResponse.builder()
                 .id(collection.getId())
@@ -266,10 +163,14 @@ public class MilkCollectionService {
                 .routeStopId(collection.getRouteStopId())
                 .collectedAt(collection.getCollectedAt())
                 .quantityLiters(collection.getQuantityLiters())
+                .temperatureCelsius(collection.getTemperatureCelsius())
+                .qualityNotes(collection.getQualityNotes())
                 .status(collection.getStatus())
                 .notes(collection.getNotes())
-                .correctionCount(collection.getCorrectionCount())
+                .correctionCount(collection.getCorrectionCount() != null ? collection.getCorrectionCount() : 0)
                 .updatedByUserId(collection.getUpdatedByUserId())
+                .validatorUserId(collection.getValidatorUserId())
+                .validationNotes(collection.getValidationNotes())
                 .createdAt(collection.getCreatedAt())
                 .updatedAt(collection.getUpdatedAt())
                 .build();

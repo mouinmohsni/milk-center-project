@@ -22,8 +22,9 @@ public class JwtService {
     @Value("${jwt.secret}") // Injecte la clé secrète depuis application.properties
     private String SECRET;
 
-    public String generateToken(String userName, String role) {
+    public String generateToken(Long userId, String userName, String role) {
         Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", userId);
         claims.put("role", role); // On insère le rôle dans le token !
         return createToken(claims, userName);
     }
