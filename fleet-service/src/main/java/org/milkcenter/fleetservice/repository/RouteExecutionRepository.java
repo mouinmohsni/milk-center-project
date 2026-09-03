@@ -1,4 +1,5 @@
 package org.milkcenter.fleetservice.repository;
+import org.milkcenter.fleetservice.enums.RouteExecutionStatus;
 import org.milkcenter.fleetservice.model.RouteExecution;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -38,6 +39,20 @@ public interface RouteExecutionRepository
             Date executionDate,
             Long executionId
     );
+
+    Optional<RouteExecution>
+    findByActualDriver_UserIdAndActualVehicle_IdAndStatus(
+            Long userId,
+            Long vehicleId,
+            RouteExecutionStatus status
+    );
+
+    Optional<RouteExecution>
+    findByActualDriver_UserIdAndStatus(
+            Long userId,
+            RouteExecutionStatus status
+    );
+
 
 }
 

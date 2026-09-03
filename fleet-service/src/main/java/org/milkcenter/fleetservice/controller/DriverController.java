@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.milkcenter.fleetservice.dto.request.driver.*;
 import org.milkcenter.fleetservice.dto.response.DriverResponse;
 import org.milkcenter.fleetservice.enums.DriverStatus;
+import org.milkcenter.fleetservice.security.CurrentUserService;
 import org.milkcenter.fleetservice.service.DriverService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ import java.util.List;
 public class DriverController {
 
     private final DriverService driverService;
+    private final CurrentUserService currentUserService;
 
     // Retourner tous les chauffeurs.
     @GetMapping
@@ -43,6 +45,16 @@ public class DriverController {
                 driverService.getDriverByUserId(userId)
         );
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<DriverResponse> getDriverByUserId() {
+        Long userId = currentUserService.getCurrentUserId();
+        return ResponseEntity.ok(
+                driverService.getDriverByUserId(userId)
+        );
+    }
+
+
 
     // Rechercher un chauffeur par son numéro de permis.
     @GetMapping("/license/{licenseNumber}")
@@ -111,7 +123,7 @@ public class DriverController {
         );
     }
 
-/*
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteDriver(
             @PathVariable Long id
@@ -119,6 +131,6 @@ public class DriverController {
         driverService.deleteDriver(id);
         return ResponseEntity.noContent().build();
     }
-*/
+
 
 }

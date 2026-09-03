@@ -181,6 +181,13 @@ public class DriverService {
         return mapToResponse(updatedDriver);
     }
 
+
+    public void deleteDriver(Long id) {
+        Driver existingDriver = findDriverById(id);
+        driverRepository.delete(existingDriver);
+
+    }
+
     // =====================================================
     // METHODES METIER
     // =====================================================

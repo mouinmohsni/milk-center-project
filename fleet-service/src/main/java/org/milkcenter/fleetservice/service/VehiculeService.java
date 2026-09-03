@@ -7,9 +7,16 @@ import org.milkcenter.fleetservice.dto.request.vehicle.VehicleOperationsUpdateRe
 import org.milkcenter.fleetservice.dto.request.vehicle.VehicleRequest;
 import org.milkcenter.fleetservice.dto.request.vehicle.VehicleStatusUpdateRequest;
 import org.milkcenter.fleetservice.dto.response.VehicleResponse;
+import org.milkcenter.fleetservice.enums.RouteExecutionStatus;
 import org.milkcenter.fleetservice.enums.VehicleStatus;
+import org.milkcenter.fleetservice.model.Driver;
+import org.milkcenter.fleetservice.model.Route;
+import org.milkcenter.fleetservice.model.RouteExecution;
 import org.milkcenter.fleetservice.model.Vehicle;
+import org.milkcenter.fleetservice.repository.RouteExecutionRepository;
+import org.milkcenter.fleetservice.repository.RouteRepository;
 import org.milkcenter.fleetservice.repository.VehicleRepository;
+import org.milkcenter.fleetservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -17,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +33,8 @@ import java.util.stream.Collectors;
 public class VehiculeService {
 
     private final VehicleRepository vehicleRepository ;
+    private final CurrentUserService currentUserService;
+    private  final RouteExecutionRepository routeExecutionRepository;
 
     private static final Long OIL_CHANGE_INTERVAL_KM = 10_000L;
 
@@ -138,12 +149,15 @@ public class VehiculeService {
         Vehicle updatedVehicle  = vehicleRepository.save(vehicle);
         return mapToResponse(updatedVehicle);
     }
-
+//==============================================================
     public VehicleResponse updateVehicleByOperator(
             Long vehicleId,
             VehicleOperationsUpdateRequest request
     ) {
         Vehicle vehicle = findVehicleById(vehicleId);
+
+
+        checkDriverAccess(vehicleId);
 
         if (request.getKm() == null
                 && request.getLastOilChangeMileage() == null) {
@@ -281,6 +295,41 @@ public class VehiculeService {
     // ============================================
     // Mapper privé — Entité → DTO Response
     // ============================================
+
+
+    private void checkDriverAccess(Long vehicleId) {
+        String role = currentUserService.getCurrentRole();
+
+        if ("MANAGER".equals(role)) {
+            return;
+        }
+        if ("DRIVER".equals(role)) {
+            Long currentUserId = currentUserService.getCurrentUserId();
+
+            Optional<RouteExecution> routeExecution =
+                    routeExecutionRepository
+                            .findByActualDriver_UserIdAndActualVehicle_IdAndStatus(
+                                    currentUserId,
+                                    vehicleId,
+                                    RouteExecutionStatus.ACTIVE
+                            );
+
+            if (routeExecution.isEmpty()) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Ce véhicule ne vous est pas affecté"
+                );
+            }
+            return;
+        }
+        // Refuser également les rôles inconnus ou absents.
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Rôle non autorisé pour cette opération"
+        );
+    }
+
+
     private VehicleResponse mapToResponse(Vehicle vehicle ){
         return VehicleResponse.builder()
                 .id(vehicle.getId())

@@ -7,15 +7,20 @@ import org.milkcenter.fleetservice.dto.request.routeStop.RouteStopRequest;
 import org.milkcenter.fleetservice.dto.request.routeStop.RouteStopUpdateRequest;
 import org.milkcenter.fleetservice.dto.response.RouteStopResponse;
 import org.milkcenter.fleetservice.enums.AssignmentStatusRouteStop;
+import org.milkcenter.fleetservice.enums.RouteExecutionStatus;
 import org.milkcenter.fleetservice.model.Route;
+import org.milkcenter.fleetservice.model.RouteExecution;
 import org.milkcenter.fleetservice.model.RouteStop;
+import org.milkcenter.fleetservice.repository.RouteExecutionRepository;
 import org.milkcenter.fleetservice.repository.RouteRepository;
 import org.milkcenter.fleetservice.repository.RouteStopRepository;
+import org.milkcenter.fleetservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,28 +30,49 @@ public class RouteStopService {
 
     private final RouteStopRepository routeStopRepository;
     private final RouteRepository routeRepository;
+    private final CurrentUserService currentUserService;
+    private final RouteExecutionRepository routeExecutionRepository;
 
     // =====================================================
     // RECHERCHE
     // =====================================================
 
-    /** Retourne tous les arrêts. */
+    /**
+     * Retourne tous les arrêts.
+     * Cette recherche globale est réservée au MANAGER.
+     */
     public List<RouteStopResponse> getAllStops( ) {
+        requireManager();
+
         return routeStopRepository.findAll()
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    /** Recherche un arrêt par son identifiant. */
+    /**
+     * Recherche un arrêt par son identifiant.
+     * Le DRIVER et le FARMER sont contrôlés selon leur propriété.
+     */
     public RouteStopResponse getStopById(Long id) {
-        return mapToResponse(findStopById(id));
+        RouteStop routeStop = findStopById(id);
+
+        Long routeId = routeStop.getRoute() != null
+                ? routeStop.getRoute().getId()
+                : null;
+
+        checkAccess(routeStop.getId(), routeId);
+
+        return mapToResponse(routeStop);
     }
 
-    /** Retourne les arrêts d'une route donnée. */
+    /**
+     * Retourne les arrêts d'une route donnée.
+     */
     public List<RouteStopResponse> getStopsByRouteId(Long routeId) {
-        // On vérifie d'abord que la route existe.
+        // Vérifie que la route existe et que l'utilisateur peut la consulter.
         findRouteById(routeId);
+        checkRouteAccess(routeId);
 
         return routeStopRepository.findByRoute_Id(routeId)
                 .stream()
@@ -54,18 +80,58 @@ public class RouteStopService {
                 .collect(Collectors.toList());
     }
 
-    /** Retourne tous les arrêts d'un fermier. */
+    /**
+     * Retourne les arrêts d'un fermier.
+     */
     public List<RouteStopResponse> getStopsByFarmerId(Long farmerId) {
-        return routeStopRepository.findByFarmerId(farmerId)
-                .stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
+        String role = currentUserService.getCurrentRole();
+        Long currentUserId = currentUserService.getCurrentUserId();
+
+        if ("MANAGER".equals(role)) {
+            return mapStops(routeStopRepository.findByFarmerId(farmerId));
+        }
+
+        if ("FARMER".equals(role)) {
+            // Le FARMER ne peut demander que ses propres arrêts.
+            if (!Objects.equals(farmerId, currentUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Vous ne pouvez consulter que vos propres arrêts"
+                );
+            }
+
+            return mapStops(routeStopRepository.findByFarmerId(farmerId));
+        }
+
+        if ("DRIVER".equals(role)) {
+            // Le DRIVER ne reçoit que les arrêts situés sur ses routes actives.
+            List<RouteStop> stops = routeStopRepository.findByFarmerId(farmerId);
+
+            return stops.stream()
+                    .filter(stop -> stop.getRoute() != null)
+                    .filter(stop -> hasActiveExecutionForDriver(
+                            stop.getRoute().getId(),
+                            currentUserId
+                    ))
+                    .map(this::mapToResponse)
+                    .collect(Collectors.toList());
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Rôle non autorisé pour cette opération"
+        );
     }
 
-    /** Retourne les arrêts affectés ou non affectés. */
+    /**
+     * Recherche globale par statut d'affectation.
+     * Cette méthode est réservée au MANAGER.
+     */
     public List<RouteStopResponse> getStopsByAssignmentStatus(
             AssignmentStatusRouteStop status
     ) {
+        requireManager();
+
         return routeStopRepository.findByAssignmentStatus(status)
                 .stream()
                 .map(this::mapToResponse)
@@ -78,11 +144,11 @@ public class RouteStopService {
 
     /**
      * Crée un arrêt.
-     *
-     * routeId est facultatif : l'arrêt peut être créé sans route.
-     * En revanche, sequenceOrder ne peut pas être fourni sans route.
+     * routeId est facultatif.
+     * sequenceOrder est interdit si aucune route n'est affectée.
      */
     public RouteStopResponse createStop(RouteStopRequest request) {
+        requireManager();
 
         Route route = null;
 
@@ -104,7 +170,7 @@ public class RouteStopService {
                 .plannedTime(request.getPlannedTime())
                 .build();
 
-        // assignmentStatus sera également calculé par @PrePersist.
+        // Le statut devient ASSIGNED ou UNASSIGNED selon la présence d'une route.
         stop.updateAssignmentStatus();
 
         RouteStop savedStop = routeStopRepository.save(stop);
@@ -117,14 +183,14 @@ public class RouteStopService {
 
     /**
      * Affecte un arrêt à une route.
-     *
-     * L'ordre peut être null : le manager peut choisir la route
-     * maintenant et définir la position plus tard.
+     * Cette opération modifie la planification et est réservée au MANAGER.
      */
     public RouteStopResponse assignStop(
             Long stopId,
             RouteStopAssignmentRequest request
     ) {
+        requireManager();
+
         RouteStop stop = findStopById(stopId);
         Route route = findRouteById(request.getRouteId());
 
@@ -135,8 +201,6 @@ public class RouteStopService {
             stop.setPlannedTime(request.getPlannedTime());
         }
 
-        // La route existe : le statut devient ASSIGNED,
-        // même si sequenceOrder est encore null.
         stop.updateAssignmentStatus();
 
         RouteStop updatedStop = routeStopRepository.save(stop);
@@ -145,13 +209,11 @@ public class RouteStopService {
 
     /**
      * Désaffecte complètement un arrêt.
-     *
-     * La méthode de l'entité met route et sequenceOrder à null
-     * et place assignmentStatus à UNASSIGNED.
      */
     public RouteStopResponse unassignStop(Long stopId) {
-        RouteStop stop = findStopById(stopId);
+        requireManager();
 
+        RouteStop stop = findStopById(stopId);
         stop.unassignRoute();
 
         RouteStop updatedStop = routeStopRepository.save(stop);
@@ -164,14 +226,14 @@ public class RouteStopService {
 
     /**
      * Modifie partiellement un arrêt.
-     *
-     * Cette méthode ne désaffecte pas l'arrêt lorsque routeId est null.
-     * Pour désaffecter, utilisez explicitement unassignStop().
+     * Pour désaffecter un arrêt, il faut utiliser unassignStop().
      */
     public RouteStopResponse updateStop(
             Long stopId,
             RouteStopUpdateRequest request
     ) {
+        requireManager();
+
         RouteStop stop = findStopById(stopId);
 
         if (request.getRouteId() != null) {
@@ -206,18 +268,138 @@ public class RouteStopService {
 
     /**
      * Supprime physiquement un arrêt.
-     *
-     * À utiliser seulement si l'arrêt n'a pas d'historique métier.
-     * Sinon, préférez unassignStop().
      */
     public void deleteStop(Long stopId) {
+        requireManager();
+
         RouteStop stop = findStopById(stopId);
         routeStopRepository.delete(stop);
     }
 
     // =====================================================
-    // METHODES PRIVEES
+    // CONTROLES D'ACCES
     // =====================================================
+
+    /**
+     * Contrôle l'accès à un arrêt précis.
+     */
+    private void checkAccess(Long stopId, Long routeId) {
+        String role = currentUserService.getCurrentRole();
+        Long currentUserId = currentUserService.getCurrentUserId();
+
+        if ("MANAGER".equals(role)) {
+            return;
+        }
+
+        if ("DRIVER".equals(role)) {
+            if (routeId == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Cet arrêt n'est affecté à aucune route"
+                );
+            }
+
+            if (!hasActiveExecutionForDriver(routeId, currentUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Cet arrêt appartient à une route qui ne vous est pas affectée"
+                );
+            }
+
+            return;
+        }
+
+        if ("FARMER".equals(role)) {
+            RouteStop routeStop = findStopById(stopId);
+
+            if (!Objects.equals(routeStop.getFarmerId(), currentUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Vous n'avez pas accès à cet arrêt"
+                );
+            }
+
+            return;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Rôle non autorisé pour cette opération"
+        );
+    }
+
+    /**
+     * Vérifie qu'un chauffeur possède une exécution ACTIVE pour une route.
+     */
+    private boolean hasActiveExecutionForDriver(
+            Long routeId,
+            Long currentUserId
+    ) {
+        List<RouteExecution> executions =
+                routeExecutionRepository
+                        .findByRoute_IdOrderByExecutionDateDesc(routeId);
+
+        return executions.stream()
+                .anyMatch(execution ->
+                        execution.getStatus() == RouteExecutionStatus.ACTIVE
+                                && execution.getActualDriver() != null
+                                && Objects.equals(
+                                execution.getActualDriver().getUserId(),
+                                currentUserId
+                        )
+                );
+    }
+
+    /**
+     * Vérifie qu'un chauffeur peut consulter une route.
+     */
+    private void checkRouteAccess(Long routeId) {
+        String role = currentUserService.getCurrentRole();
+
+        if ("MANAGER".equals(role)) {
+            return;
+        }
+
+        if ("DRIVER".equals(role)) {
+            Long currentUserId = currentUserService.getCurrentUserId();
+
+            if (!hasActiveExecutionForDriver(routeId, currentUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Cette route ne vous est pas affectée"
+                );
+            }
+
+            return;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Vous n'êtes pas autorisé à consulter les arrêts de cette route"
+        );
+    }
+
+    /**
+     * Réserve les opérations d'écriture et les recherches globales au MANAGER.
+     */
+    private void requireManager() {
+        if (!"MANAGER".equals(currentUserService.getCurrentRole())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Cette opération est réservée au MANAGER"
+            );
+        }
+    }
+
+    // =====================================================
+    // METHODES UTILITAIRES
+    // =====================================================
+
+    private List<RouteStopResponse> mapStops(List<RouteStop> stops) {
+        return stops.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
 
     private RouteStop findStopById(Long id) {
         return routeStopRepository.findById(id)

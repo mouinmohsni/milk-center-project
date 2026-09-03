@@ -3,6 +3,8 @@
 spring.application.name=fleet-service
 server.port=8083
 
+jwt.secret=jwt.secret
+
 # Base de données
 spring.datasource.url=jdbc:mysql://localhost:3306/milk_fleet_db?createDatabaseIfNotExist=true
 spring.datasource.username=votre_mot_de_passe

@@ -18,12 +18,14 @@ import org.milkcenter.fleetservice.repository.DriverRepository;
 import org.milkcenter.fleetservice.repository.RouteExecutionRepository;
 import org.milkcenter.fleetservice.repository.RouteRepository;
 import org.milkcenter.fleetservice.repository.VehicleRepository;
+import org.milkcenter.fleetservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,26 +37,42 @@ public class RouteExecutionService {
     private final RouteRepository routeRepository;
     private final DriverRepository driverRepository;
     private final VehicleRepository vehicleRepository;
+    private final CurrentUserService currentUserService;
 
     // =====================================================
     // RECHERCHE
     // =====================================================
 
-    /** Retourne toutes les exécutions. */
+    /**
+     * Retourne toutes les exécutions.
+     * Cette recherche globale est réservée au MANAGER.
+     */
     public List<RouteExecutionResponse> getAllExecutions( ) {
+        requireManager();
+
         return routeExecutionRepository.findAll()
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
-    /** Recherche une exécution par son identifiant. */
+    /**
+     * Recherche une exécution par son identifiant.
+     * Un DRIVER ne peut consulter que sa propre exécution.
+     */
     public RouteExecutionResponse getExecutionById(Long id) {
-        return mapToResponse(findExecutionById(id));
+        RouteExecution execution = findExecutionById(id);
+        checkExecutionAccess(execution);
+
+        return mapToResponse(execution);
     }
 
-    /** Retourne l'historique des exécutions d'une route. */
+    /**
+     * Retourne l'historique des exécutions d'une route.
+     * Cette recherche globale reste réservée au MANAGER.
+     */
     public List<RouteExecutionResponse> getExecutionsByRouteId(Long routeId) {
+        requireManager();
         findRouteById(routeId);
 
         return routeExecutionRepository
@@ -64,11 +82,29 @@ public class RouteExecutionService {
                 .collect(Collectors.toList());
     }
 
-    /** Retourne l'historique d'un chauffeur. */
-    public List<RouteExecutionResponse> getExecutionsByDriverId(
-            Long driverId
-    ) {
-        findDriverById(driverId);
+    /**
+     * Retourne l'historique d'un chauffeur.
+     * Le DRIVER ne peut consulter que son propre historique.
+     */
+    public List<RouteExecutionResponse> getExecutionsByDriverId(Long driverId) {
+        Driver driver = findDriverById(driverId);
+        String role = currentUserService.getCurrentRole();
+
+        if ("DRIVER".equals(role)) {
+            Long currentUserId = currentUserService.getCurrentUserId();
+
+            if (!Objects.equals(driver.getUserId(), currentUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Vous ne pouvez consulter que vos propres exécutions"
+                );
+            }
+        } else if (!"MANAGER".equals(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Rôle non autorisé pour cette opération"
+            );
+        }
 
         return routeExecutionRepository
                 .findByActualDriver_IdOrderByExecutionDateDesc(driverId)
@@ -77,10 +113,12 @@ public class RouteExecutionService {
                 .collect(Collectors.toList());
     }
 
-    /** Retourne l'historique d'un véhicule. */
-    public List<RouteExecutionResponse> getExecutionsByVehicleId(
-            Long vehicleId
-    ) {
+    /**
+     * Retourne l'historique d'un véhicule.
+     * Cette recherche est réservée au MANAGER.
+     */
+    public List<RouteExecutionResponse> getExecutionsByVehicleId(Long vehicleId) {
+        requireManager();
         findVehicleById(vehicleId);
 
         return routeExecutionRepository
@@ -96,16 +134,15 @@ public class RouteExecutionService {
 
     /**
      * Crée une exécution pour une date donnée.
-     *
-     * Si le chauffeur ou le véhicule réel n'est pas fourni,
-     * on utilise l'affectation habituelle de la route.
+     * Cette opération est réservée au MANAGER.
      */
     public RouteExecutionResponse createExecution(
             RouteExecutionRequest request
     ) {
+        requireManager();
+
         Route route = findRouteById(request.getRouteId());
 
-        // Une route annulée ne peut pas avoir de nouvelle exécution.
         if (route.getStatus() == RouteStatus.CANCELLED) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -113,7 +150,6 @@ public class RouteExecutionService {
             );
         }
 
-        // Une seule exécution est autorisée pour une route et une date.
         if (routeExecutionRepository.existsByRoute_IdAndExecutionDate(
                 request.getRouteId(),
                 request.getExecutionDate()
@@ -124,8 +160,6 @@ public class RouteExecutionService {
             );
         }
 
-        // Si aucun remplacement n'est fourni, on utilise les affectations
-        // habituelles enregistrées dans Route.
         Driver actualDriver = request.getActualDriverId() != null
                 ? findDriverById(request.getActualDriverId())
                 : route.getDriver();
@@ -148,8 +182,6 @@ public class RouteExecutionService {
             );
         }
 
-        // On vérifie la disponibilité uniquement si l'exécution
-        // est créée avec l'affectation actuelle.
         validateDriverAvailability(actualDriver);
         validateVehicleAvailability(actualVehicle);
 
@@ -173,12 +205,14 @@ public class RouteExecutionService {
 
     /**
      * Modifie la date, le chauffeur réel ou le véhicule réel.
-     * Le statut est modifié par updateExecutionStatus().
+     * Cette opération reste réservée au MANAGER.
      */
     public RouteExecutionResponse updateExecution(
             Long id,
             RouteExecutionUpdateRequest request
     ) {
+        requireManager();
+
         RouteExecution execution = findExecutionById(id);
 
         if (request.getExecutionDate() == null
@@ -232,17 +266,34 @@ public class RouteExecutionService {
     // =====================================================
 
     /**
-     * Change le statut et gère automatiquement les dates de début
-     * et de fin de l'exécution.
+     * Change le statut d'une exécution.
+     * Le MANAGER peut modifier toute exécution.
+     * Le DRIVER peut modifier uniquement son exécution affectée.
      */
     public RouteExecutionResponse updateExecutionStatus(
             Long id,
             RouteExecutionStatusUpdateRequest request
     ) {
         RouteExecution execution = findExecutionById(id);
+        checkExecutionAccess(execution);
+
+        String role = currentUserService.getCurrentRole();
         RouteExecutionStatus newStatus = request.getStatus();
 
-        validateStatusTransition(execution.getStatus(), newStatus);
+        // Le DRIVER ne modifie pas l'annulation d'une exécution.
+        // Cette décision administrative reste réservée au MANAGER.
+        if ("DRIVER".equals(role)
+                && newStatus == RouteExecutionStatus.CANCELLED) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Le DRIVER ne peut pas annuler une exécution"
+            );
+        }
+
+        validateStatusTransition(
+                execution.getStatus(),
+                newStatus
+        );
 
         execution.setStatus(newStatus);
 
@@ -253,8 +304,6 @@ public class RouteExecutionService {
 
         if (newStatus == RouteExecutionStatus.FINISHED
                 && execution.getFinishedAt() == null) {
-            // Si l'exécution passe directement de PLANNED à FINISHED,
-            // on renseigne également sa date de début.
             if (execution.getStartedAt() == null) {
                 execution.setStartedAt(new Date());
             }
@@ -294,12 +343,26 @@ public class RouteExecutionService {
     }
 
     /**
-     * Empêche les changements incohérents de statut.
+     * Vérifie les transitions autorisées entre les statuts.
      */
     private void validateStatusTransition(
             RouteExecutionStatus currentStatus,
             RouteExecutionStatus newStatus
     ) {
+        if (newStatus == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Le nouveau statut est obligatoire"
+            );
+        }
+
+        if (currentStatus == newStatus) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "L'exécution possède déjà ce statut"
+            );
+        }
+
         if (currentStatus == RouteExecutionStatus.FINISHED
                 || currentStatus == RouteExecutionStatus.CANCELLED) {
             throw new ResponseStatusException(
@@ -308,11 +371,21 @@ public class RouteExecutionService {
             );
         }
 
-        if (currentStatus == RouteExecutionStatus.PLANNED
-                && newStatus == RouteExecutionStatus.FINISHED) {
-            // Ce changement reste permis : le Service renseigne
-            // automatiquement startedAt et finishedAt.
-            return;
+        boolean validTransition =
+                (currentStatus == RouteExecutionStatus.PLANNED
+                        && (newStatus == RouteExecutionStatus.ACTIVE
+                        || newStatus == RouteExecutionStatus.FINISHED
+                        || newStatus == RouteExecutionStatus.CANCELLED))
+                        || (currentStatus == RouteExecutionStatus.ACTIVE
+                        && (newStatus == RouteExecutionStatus.FINISHED
+                        || newStatus == RouteExecutionStatus.CANCELLED));
+
+        if (!validTransition) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Transition de statut non autorisée : "
+                            + currentStatus + " vers " + newStatus
+            );
         }
     }
 
@@ -321,13 +394,62 @@ public class RouteExecutionService {
     // =====================================================
 
     /**
-     * Suppression physique exceptionnelle.
-     * Il est préférable de passer le statut à CANCELLED pour préserver
-     * l'historique d'une exécution déjà créée.
+     * Suppression physique exceptionnelle, réservée au MANAGER.
      */
     public void deleteExecution(Long id) {
+        requireManager();
+
         RouteExecution execution = findExecutionById(id);
         routeExecutionRepository.delete(execution);
+    }
+
+    // =====================================================
+    // CONTROLES D'ACCES
+    // =====================================================
+
+    /**
+     * Vérifie l'accès à une exécution précise.
+     */
+    private void checkExecutionAccess(RouteExecution execution) {
+        String role = currentUserService.getCurrentRole();
+
+        if ("MANAGER".equals(role)) {
+            return;
+        }
+
+        if ("DRIVER".equals(role)) {
+            Long currentUserId = currentUserService.getCurrentUserId();
+
+            if (execution.getActualDriver() == null
+                    || !Objects.equals(
+                    execution.getActualDriver().getUserId(),
+                    currentUserId
+            )) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Cette exécution ne vous est pas affectée"
+                );
+            }
+
+            return;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Rôle non autorisé pour cette opération"
+        );
+    }
+
+    /**
+     * Vérifie que l'utilisateur connecté est MANAGER.
+     */
+    private void requireManager() {
+        if (!"MANAGER".equals(currentUserService.getCurrentRole())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Cette opération est réservée au MANAGER"
+            );
+        }
     }
 
     // =====================================================
@@ -366,7 +488,7 @@ public class RouteExecutionService {
                 ));
     }
 
-    /** Transforme une entité en DTO de réponse sans exposer les entités liées. */
+    /** Transforme l'entité en DTO de réponse. */
     private RouteExecutionResponse mapToResponse(
             RouteExecution execution
     ) {

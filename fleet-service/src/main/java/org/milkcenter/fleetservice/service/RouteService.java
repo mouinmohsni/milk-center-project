@@ -16,12 +16,14 @@ import org.milkcenter.fleetservice.model.Vehicle;
 import org.milkcenter.fleetservice.repository.DriverRepository;
 import org.milkcenter.fleetservice.repository.RouteRepository;
 import org.milkcenter.fleetservice.repository.VehicleRepository;
+import org.milkcenter.fleetservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +34,7 @@ public class RouteService {
     private final RouteRepository routeRepository;
     private final DriverRepository driverRepository;
     private final VehicleRepository vehicleRepository;
+    private final CurrentUserService currentUserService;
 
     // =====================================================
     // RECHERCHE
@@ -51,7 +54,10 @@ public class RouteService {
      * Recherche une route par son identifiant.
      */
     public RouteResponse getRouteById(Long id) {
-        return mapToResponse(findRouteById(id));
+        Route route =findRouteById(id);
+        checkDriverAccess(route);
+
+        return mapToResponse(route);
     }
 
     /**
@@ -213,6 +219,29 @@ public class RouteService {
     // =====================================================
     // VALIDATIONS METIER
     // =====================================================
+
+    private void checkDriverAccess(Route route) {
+        String role = currentUserService.getCurrentRole();
+
+        if ("MANAGER".equals(role)) {
+            return;
+        }
+
+        if ("DRIVER".equals(role)) {
+            Long connectedUserId = currentUserService.getCurrentUserId();
+
+
+
+            if (!Objects.equals(route.getDriver(), connectedUserId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Cette route ne vous est pas affectée"
+                );
+            }
+
+        }
+    }
+
 
     /**
      * Vérifie qu'un chauffeur existe avant son affectation à une route.
