@@ -169,7 +169,18 @@ public class SecurityConfig {
                                 "/api/route-executions/*"
                         ).hasRole("MANAGER")
 
-                        // Toute autre requête doit être authentifiée.
+                                // Gestion des maintenances : MANAGER uniquement
+                                .requestMatchers(
+                                        "/api/maintenances/**"
+                                ).hasRole("MANAGER")
+
+// Gestion des achats de carburant : MANAGER uniquement
+                                .requestMatchers(
+                                        "/api/fuel-consumptions/**"
+                                ).hasRole("MANAGER")
+
+
+                                // Toute autre requête doit être authentifiée.
                         .anyRequest().authenticated()
                 )
 
