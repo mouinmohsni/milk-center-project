@@ -1,6 +1,7 @@
 package org.milkcenter.invoicingservice.config;
 
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.milkcenter.invoicingservice.filter.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,16 +14,17 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            JwtAuthFilter jwtAuthFilter
+            HttpSecurity http
     ) throws Exception {
 
         http
-                // API REST sans session et sans formulaire web.
                 .csrf(csrf -> csrf.disable( ))
                 .formLogin(formLogin -> formLogin.disable())
                 .httpBasic(httpBasic -> httpBasic.disable( ))
@@ -32,148 +34,77 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // =====================================================
-                        // DRIVER : LECTURE DES RESSOURCES QUI PEUVENT LE CONCERNER
-                        // =====================================================
-                        // Les services doivent ensuite vérifier l'affectation réelle.
+                        /*
+                         * Il n'y a pas de /api/auth/** dans invoicing-service.
+                         * Le login est géré par identity-service.
+                         */
+
+                        // Consultation de ses propres factures.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/drivers/me",
-                                "/api/routes/*",
-                                "/api/route-stops/*",
-                                "/api/route-stops/route/*",
-                                "/api/route-stops/farmer/*",
-                                "/api/route-executions/*",
-                                "/api/route-executions/driver/*"
-                        ).hasRole("DRIVER")
+                                "/api/invoices/me"
+                        ).hasAnyRole("FARMER", "MANAGER")
 
-                        // =====================================================
-                        // FARMER : LECTURE DE SES PROPRES ARRETS
-                        // =====================================================
-                        // RouteStopService doit vérifier que farmerId correspond
-                        // bien à l'utilisateur présent dans le JWT.
+                        // Consultation d'une facture précise.
+                        // Le service vérifie ensuite la propriété du fermier.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/route-stops/*",
-                                "/api/route-stops/farmer/*"
-                        ).hasRole("FARMER")
+                                "/api/invoices/*"
+                        ).hasAnyRole("FARMER", "MANAGER")
 
-                        // =====================================================
-                        // DRIVER ET MANAGER : STATUT D'UNE EXECUTION
-                        // =====================================================
-                        // RouteExecutionService doit vérifier que le DRIVER
-                        // est le chauffeur réellement affecté à l'exécution.
-                        .requestMatchers(
-                                HttpMethod.PATCH,
-                                "/api/route-executions/*/status"
-                        ).hasAnyRole("MANAGER", "DRIVER")
-
-                        // =====================================================
-                        // MANAGER : LECTURES ADMINISTRATIVES
-                        // =====================================================
+                        // Liste globale et recherche par fermier : MANAGER uniquement.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                // Drivers
-                                "/api/drivers",
-                                "/api/drivers/*",
-                                "/api/drivers/user/*",
-                                "/api/drivers/license/*",
-                                "/api/drivers/status/*",
-                                "/api/drivers/available",
-                                "/api/drivers/salary",
-
-                                // Routes
-                                "/api/routes",
-                                "/api/routes/",
-                                "/api/routes/driver/*",
-                                "/api/routes/vehicle/*",
-                                "/api/routes/status/*",
-
-                                // Véhicules
-                                "/api/vehicles",
-                                "/api/vehicles/",
-                                "/api/vehicles/*",
-                                "/api/vehicles/license/*",
-                                "/api/vehicles/status/*",
-                                "/api/vehicles/model/*",
-
-                                // Route stops globaux
-                                "/api/route-stops",
-                                "/api/route-stops/",
-                                "/api/route-stops/assignment-status/*",
-
-                                // Route executions globales
-                                "/api/route-executions",
-                                "/api/route-executions/",
-                                "/api/route-executions/route/*",
-                                "/api/route-executions/vehicle/*"
+                                "/api/invoices",
+                                "/api/invoices/",
+                                "/api/invoices/farmer/*"
                         ).hasRole("MANAGER")
 
-                        // =====================================================
-                        // MANAGER : CREATION
-                        // =====================================================
+                        // Création, modification, changement de statut et suppression.
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/drivers",
-                                "/api/routes",
-                                "/api/vehicles",
-                                "/api/route-stops",
-                                "/api/route-executions"
+                                "/api/invoices"
                         ).hasRole("MANAGER")
 
-                        // =====================================================
-                        // MANAGER : REMPLACEMENT COMPLET
-                        // =====================================================
-                        .requestMatchers(
-                                HttpMethod.PUT,
-                                "/api/drivers/*",
-                                "/api/routes/*",
-                                "/api/vehicles/*"
-                        ).hasRole("MANAGER")
-
-                        // =====================================================
-                        // MANAGER : MODIFICATIONS ADMINISTRATIVES
-                        // =====================================================
                         .requestMatchers(
                                 HttpMethod.PATCH,
-                                "/api/drivers/*/status",
-                                "/api/routes/*/status",
-                                "/api/routes/*/activate",
-                                "/api/routes/*/cancel",
-                                "/api/vehicles/*/status",
-                                "/api/route-stops/*/assign",
-                                "/api/route-stops/*/unassign",
-                                "/api/route-stops/*",
-                                "/api/route-executions/*"
+                                "/api/invoices/*",
+                                "/api/invoices/*/status"
                         ).hasRole("MANAGER")
 
-                        // =====================================================
-                        // DRIVER : OPERATIONS DU VEHICULE
-                        // =====================================================
-                        // VehiculeService doit vérifier que le véhicule est
-                        // affecté au DRIVER via une RouteExecution active.
-                        .requestMatchers(
-                                HttpMethod.PATCH,
-                                "/api/vehicles/*/operations"
-                        ).hasRole("DRIVER")
-
-                        // =====================================================
-                        // MANAGER : SUPPRESSION
-                        // =====================================================
                         .requestMatchers(
                                 HttpMethod.DELETE,
-                                "/api/drivers/*",
-                                "/api/routes/*",
-                                "/api/vehicles/*",
-                                "/api/route-stops/*",
-                                "/api/route-executions/*"
+                                "/api/invoices/*"
                         ).hasRole("MANAGER")
 
-                        // Toute autre requête doit être authentifiée.
+                        // Consultation de ses paiements ou des paiements d'une facture accessible.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/payments/*",
+                                "/api/payments/invoice/*"
+                        ).hasAnyRole("FARMER", "MANAGER")
+
+                        // Création et modification des paiements : MANAGER uniquement.
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/payments/invoice/*"
+                        ).hasRole("MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/payments/*",
+                                "/api/payments/*/status"
+                        ).hasRole("MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/payments/*"
+                        ).hasRole("MANAGER")
+
+                        // Toute autre route nécessite un JWT valide.
                         .anyRequest().authenticated()
                 )
 
-                // Réponses JSON pour 401 et 403.
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, exceptionAuth) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -197,7 +128,6 @@ public class SecurityConfig {
                         })
                 )
 
-                // Le filtre JWT doit être exécuté avant le filtre standard.
                 .addFilterBefore(
                         jwtAuthFilter,
                         UsernamePasswordAuthenticationFilter.class
