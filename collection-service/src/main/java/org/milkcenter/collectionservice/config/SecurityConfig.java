@@ -63,6 +63,14 @@ public class SecurityConfig {
                         // Statistiques (Le FARMER peut voir ses propres stats)
                         .requestMatchers("/api/collections/stats/**").hasAnyRole("MANAGER", "FARMER")
 
+                        // Total mensuel ACCEPTED utilisé pour la facturation
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/collections/farmer/*/monthly-total"
+                        )
+                        .hasRole("MANAGER")
+
+
                         // Consultation globale (Réservée au MANAGER)
                         .requestMatchers(HttpMethod.GET, "/api/collections/**").hasRole("MANAGER")
 

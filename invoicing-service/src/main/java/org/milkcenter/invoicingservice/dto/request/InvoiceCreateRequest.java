@@ -1,6 +1,7 @@
 package org.milkcenter.invoicingservice.dto.request;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -24,8 +25,13 @@ import java.util.List;
 @Builder
 public class InvoiceCreateRequest {
 
-    @NotNull(message = "L'identifiant du fermier est obligatoire")
+    /** ID local de FarmerProfile dans collection-service. */
+    @NotNull(message = "L'identifiant local du fermier est obligatoire")
     private Long farmerId;
+
+    /** ID Identity du fermier, contenu dans son JWT. */
+    @NotNull(message = "L'identifiant utilisateur du fermier est obligatoire")
+    private Long farmerUserId;
 
     @NotNull(message = "Le type de facture est obligatoire")
     private InvoiceType invoiceType;
@@ -39,29 +45,18 @@ public class InvoiceCreateRequest {
     @Min(value = 2000, message = "L'année de facturation est invalide")
     private Integer billingYear;
 
-    /**
-     * Date d'émission facultative. Le service peut la définir automatiquement.
-     */
+    /** Date d'émission facultative ; le service peut la définir automatiquement. */
     private LocalDate issueDate;
 
     /** Date limite de paiement, facultative. */
     private LocalDate dueDate;
 
-    /**
-     * Taux de taxe général de la facture. Les montants restent calculés par le service.
-     */
-    @NotNull(message = "Le taux de taxe est obligatoire")
-    @Min(value = 0, message = "Le taux de taxe ne peut pas être négatif")
+    @DecimalMin(value = "0.00", message = "Le taux de taxe ne peut pas être négatif")
     private BigDecimal taxRate;
 
     @Size(max = 500, message = "Les notes ne doivent pas dépasser 500 caractères")
     private String notes;
 
-    /**
-     * Lignes de nourriture ou ligne de lait.
-     * Pour MILK_PURCHASE, le service pourra remplacer la quantité par le total
-     * calculé à partir des collections du mois.
-     */
     @Valid
     @Size(max = 100, message = "Une facture ne peut pas contenir plus de 100 lignes")
     @Builder.Default

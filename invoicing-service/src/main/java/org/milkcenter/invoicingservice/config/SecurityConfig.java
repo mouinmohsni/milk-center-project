@@ -101,6 +101,36 @@ public class SecurityConfig {
                                 "/api/payments/*"
                         ).hasRole("MANAGER")
 
+
+                        // Gestion des configurations tarifaires réservée au MANAGER
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/pricing-configurations"
+                        )
+                        .hasRole("MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/pricing-configurations",
+                                "/api/pricing-configurations/*",
+                                "/api/pricing-configurations/type/*"
+                        )
+                        .hasRole("MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/pricing-configurations/*"
+                        )
+                        .hasRole("MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/pricing-configurations/*",
+                                "/api/pricing-configurations/*/hard"
+                        )
+                        .hasRole("MANAGER")
+
+
                         // Toute autre route nécessite un JWT valide.
                         .anyRequest().authenticated()
                 )

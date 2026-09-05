@@ -140,6 +140,57 @@ public class MilkCollectionService {
         return total != null ? total : BigDecimal.ZERO;
     }
 
+    /**
+     * Calcule la quantité de lait ACCEPTED d'un fermier pour un mois donné.
+     * Le statut ACCEPTED est fixé par la règle métier et ne vient pas du client.
+     */
+    public BigDecimal getMonthlyAcceptedLiters(
+            Long farmerId,
+            int month,
+            int year
+    ) {
+        if (farmerId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "L'identifiant du fermier est obligatoire"
+            );
+        }
+
+        if (month < 1 || month > 12) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Le mois doit être compris entre 1 et 12"
+            );
+        }
+
+        if (year < 2000 || year > 2100) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "L'année est invalide"
+            );
+        }
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.clear();
+        calendar.set(year, month - 1, 1, 0, 0, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+
+        Date start = calendar.getTime();
+
+        calendar.add(Calendar.MONTH, 1);
+        calendar.add(Calendar.MILLISECOND, -1);
+
+        Date end = calendar.getTime();
+
+        return getTotalLitersByFarmerAndPeriod(
+                farmerId,
+                CollectionStatus.ACCEPTED,
+                start,
+                end
+        );
+    }
+
+
     public BigDecimal getTotalAcceptedLitersByFarmer(Long farmerId) {
         BigDecimal total = collectionRepository.sumAcceptedQuantityByFarmerId(farmerId);
         return total != null ? total : BigDecimal.ZERO;

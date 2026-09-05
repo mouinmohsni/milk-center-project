@@ -23,7 +23,13 @@ public class InvoiceResponse {
 
     private Long id;
     private String invoiceNumber;
+
+    /** ID local de FarmerProfile. */
     private Long farmerId;
+
+    /** ID Identity correspondant au propriétaire du compte fermier. */
+    private Long farmerUserId;
+
     private InvoiceType invoiceType;
     private InvoiceStatus status;
     private Integer billingMonth;

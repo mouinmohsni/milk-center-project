@@ -16,8 +16,13 @@ import java.math.BigDecimal;
 public class InvoiceLineResponse {
 
     private Long id;
+
+    /** Référence logique de la configuration utilisée. */
+    private Long pricingConfigurationId;
+
     private String description;
     private String unit;
+    private BigDecimal packageWeightKg;
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal subtotal;

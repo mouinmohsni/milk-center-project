@@ -44,9 +44,19 @@ public class Invoice {
     @Column(name = "invoice_number", nullable = false, unique = true, length = 50)
     private String invoiceNumber;
 
-    /** Fermier concerné par la facture. */
+    /**
+     * ID local du FarmerProfile dans collection-service.
+     * Il correspond au farmerId des MilkCollection.
+     */
     @Column(name = "farmer_id", nullable = false)
     private Long farmerId;
+
+    /**
+     * ID de l'utilisateur dans identity-service.
+     * Il correspond au userId contenu dans le JWT.
+     */
+    @Column(name = "farmer_user_id", nullable = false)
+    private Long farmerUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "invoice_type", nullable = false, length = 30)
@@ -73,12 +83,12 @@ public class Invoice {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
-    /** Montant hors taxe. Calculé par le service, jamais directement par le client. */
+    /** Montant hors taxe. */
     @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
     @Builder.Default
     private BigDecimal subtotal = BigDecimal.ZERO;
 
-    /** Taux de taxe en pourcentage, par exemple 19.00 pour 19 %. */
+    /** Taux de taxe en pourcentage. */
     @Column(name = "tax_rate", precision = 5, scale = 2, nullable = false)
     @Builder.Default
     private BigDecimal taxRate = BigDecimal.ZERO;

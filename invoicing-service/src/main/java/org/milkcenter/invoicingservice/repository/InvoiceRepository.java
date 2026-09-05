@@ -14,7 +14,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     Optional<Invoice> findByInvoiceNumber(String invoiceNumber);
 
     /**
-     * Vérifie si une facture existe déjà pour un fermier, un type et une période.
+     * Empêche deux factures du même type pour le même fermier et la même période.
      */
     boolean existsByFarmerIdAndInvoiceTypeAndBillingMonthAndBillingYear(
             Long farmerId,
@@ -23,9 +23,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
             Integer billingYear
     );
 
-    /**
-     * Recherche la facture mensuelle précise d'un fermier.
-     */
     Optional<Invoice> findByFarmerIdAndInvoiceTypeAndBillingMonthAndBillingYear(
             Long farmerId,
             InvoiceType invoiceType,
@@ -33,16 +30,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
             Integer billingYear
     );
 
-    /**
-     * Liste les factures d'un fermier, de la plus récente à la plus ancienne.
-     */
+    /** Recherche par ID local du profil fermier. */
     List<Invoice> findByFarmerIdOrderByBillingYearDescBillingMonthDesc(
             Long farmerId
     );
 
     /**
-     * Liste les factures selon leur type.
+     * Recherche par userId Identity, utilisé pour /api/invoices/me.
      */
+    List<Invoice> findByFarmerUserIdOrderByBillingYearDescBillingMonthDesc(
+            Long farmerUserId
+    );
+
     List<Invoice> findByInvoiceTypeOrderByBillingYearDescBillingMonthDesc(
             InvoiceType invoiceType
     );

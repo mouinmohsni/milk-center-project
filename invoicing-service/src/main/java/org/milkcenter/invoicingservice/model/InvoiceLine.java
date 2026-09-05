@@ -34,27 +34,42 @@ public class InvoiceLine {
     @JoinColumn(name = "invoice_id", nullable = false)
     private Invoice invoice;
 
-    /** Nom du produit ou de la prestation : lait, aliment, etc. */
+    /**
+     * Référence logique vers PricingConfiguration.
+     * Il ne s'agit pas d'une relation JPA ni d'une clé étrangère.
+     */
+    @Column(name = "pricing_configuration_id")
+    private Long pricingConfigurationId;
+
+    /** Nom du produit ou de la prestation. */
     @Column(name = "description", nullable = false, length = 255)
     private String description;
 
-    /** Unité de mesure : LITRE, KG, SAC, UNITE, etc. */
+    /** Unité commerciale : LITRE, KG, SAC, UNITE, etc. */
     @Column(name = "unit", length = 30)
     private String unit;
 
-    /** Quantité facturée. Pour le lait, il s'agit de la quantité mensuelle totale. */
+    /**
+     * Poids du conditionnement au moment de la facturation.
+     * Exemple : 25 kg pour un sac de 25 kg.
+     * Null pour le lait vendu au litre ou une vente au kilogramme.
+     */
+    @Column(name = "package_weight_kg", precision = 10, scale = 3)
+    private BigDecimal packageWeightKg;
+
+    /** Quantité facturée : litres, kilogrammes ou nombre de sacs. */
     @Column(name = "quantity", precision = 12, scale = 3, nullable = false)
     private BigDecimal quantity;
 
-    /** Prix d'une unité hors taxe. */
-    @Column(name = "unit_price", precision = 12, scale = 2, nullable = false)
+    /** Prix d'une unité commerciale hors taxe. */
+    @Column(name = "unit_price", precision = 12, scale = 3, nullable = false)
     private BigDecimal unitPrice;
 
-    /** Montant hors taxe de la ligne : quantity × unitPrice. */
+    /** Montant hors taxe : quantity × unitPrice. */
     @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
     private BigDecimal subtotal;
 
-    /** Taux de taxe appliqué à cette ligne, en pourcentage. */
+    /** Taux de taxe appliqué à la ligne, en pourcentage. */
     @Column(name = "tax_rate", precision = 5, scale = 2, nullable = false)
     @Builder.Default
     private BigDecimal taxRate = BigDecimal.ZERO;

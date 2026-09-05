@@ -6,6 +6,7 @@ import org.milkcenter.collectionservice.dto.request.CollectionValidationRequest;
 import org.milkcenter.collectionservice.dto.request.MilkCollectionRequest;
 import org.milkcenter.collectionservice.dto.response.FarmerProfileResponse;
 import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
+import org.milkcenter.collectionservice.dto.response.MonthlyMilkTotalResponse;
 import org.milkcenter.collectionservice.enums.CollectionStatus;
 import org.milkcenter.collectionservice.security.CurrentUserService;
 import org.milkcenter.collectionservice.service.FarmerService;
@@ -158,4 +159,33 @@ public class MilkCollectionController {
                 collectionService.getStatisticsByStatus(farmerId)
         );
     }
+
+    /**
+     * Retourne le total de lait ACCEPTED d'un fermier pour un mois donné.
+     * Cette API est destinée au calcul des factures mensuelles.
+     */
+    @GetMapping("/farmer/{farmerId}/monthly-total")
+    public ResponseEntity<MonthlyMilkTotalResponse> getMonthlyAcceptedMilkTotal(
+            @PathVariable Long farmerId,
+            @RequestParam int month,
+            @RequestParam int year
+    ) {
+        BigDecimal totalQuantityLiters =
+                collectionService.getMonthlyAcceptedLiters(
+                        farmerId,
+                        month,
+                        year
+                );
+
+        MonthlyMilkTotalResponse response = MonthlyMilkTotalResponse.builder()
+                .farmerId(farmerId)
+                .month(month)
+                .year(year)
+                .status(CollectionStatus.ACCEPTED)
+                .totalQuantityLiters(totalQuantityLiters)
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
 }

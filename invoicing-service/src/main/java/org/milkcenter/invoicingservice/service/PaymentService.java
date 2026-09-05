@@ -37,7 +37,10 @@ public class PaymentService {
      * Enregistre un paiement en attente de confirmation.
      */
     @Transactional
-    public PaymentResponse createPayment(Long invoiceId, PaymentRequest request ) {
+    public PaymentResponse createPayment(
+            Long invoiceId,
+            PaymentRequest request
+    ) {
         requireManager();
 
         Invoice invoice = findInvoiceById(invoiceId);
@@ -56,6 +59,9 @@ public class PaymentService {
         return mapToResponse(paymentRepository.save(payment));
     }
 
+    /**
+     * Consulte un paiement précis.
+     */
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(Long id) {
         Payment payment = findPaymentById(id);
@@ -63,19 +69,29 @@ public class PaymentService {
         return mapToResponse(payment);
     }
 
+    /**
+     * Liste les paiements d'une facture.
+     */
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPaymentsByInvoice(Long invoiceId) {
         Invoice invoice = findInvoiceById(invoiceId);
         requireReadAccess(invoice);
 
-        return paymentRepository.findByInvoice_IdOrderByPaymentDateDesc(invoiceId)
+        return paymentRepository
+                .findByInvoice_IdOrderByPaymentDateDesc(invoiceId)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Modifie uniquement un paiement encore en attente.
+     */
     @Transactional
-    public PaymentResponse updatePayment(Long id, PaymentUpdateRequest request) {
+    public PaymentResponse updatePayment(
+            Long id,
+            PaymentUpdateRequest request
+    ) {
         requireManager();
 
         Payment payment = findPaymentById(id);
@@ -90,15 +106,19 @@ public class PaymentService {
         if (request.getAmount() != null) {
             payment.setAmount(scale(request.getAmount()));
         }
+
         if (request.getPaymentDate() != null) {
             payment.setPaymentDate(request.getPaymentDate());
         }
+
         if (request.getPaymentMethod() != null) {
             payment.setPaymentMethod(request.getPaymentMethod());
         }
+
         if (request.getReference() != null) {
             payment.setReference(request.getReference());
         }
+
         if (request.getNotes() != null) {
             payment.setNotes(request.getNotes());
         }
@@ -107,7 +127,7 @@ public class PaymentService {
     }
 
     /**
-     * Confirme ou annule un paiement, puis recalcule le statut de la facture.
+     * Confirme, refuse ou annule un paiement en attente.
      */
     @Transactional
     public PaymentResponse updatePaymentStatus(
@@ -117,15 +137,15 @@ public class PaymentService {
         requireManager();
 
         Payment payment = findPaymentById(id);
-        PaymentStatus currentStatus = payment.getStatus();
-        PaymentStatus newStatus = request.getStatus();
 
-        if (currentStatus != PaymentStatus.PENDING) {
+        if (payment.getStatus() != PaymentStatus.PENDING) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Seul un paiement PENDING peut changer de statut"
             );
         }
+
+        PaymentStatus newStatus = request.getStatus();
 
         if (newStatus == PaymentStatus.COMPLETED) {
             validatePaymentAmount(payment);
@@ -133,13 +153,14 @@ public class PaymentService {
                 && newStatus != PaymentStatus.CANCELLED) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Statut de paiement non autorisé depuis PENDING"
+                    "Statut non autorisé depuis PENDING"
             );
         }
 
         payment.setStatus(newStatus);
 
-        if (request.getReason() != null && !request.getReason().isBlank()) {
+        if (request.getReason() != null
+                && !request.getReason().isBlank()) {
             payment.setNotes(request.getReason());
         }
 
@@ -152,6 +173,9 @@ public class PaymentService {
         return mapToResponse(savedPayment);
     }
 
+    /**
+     * Supprime uniquement un paiement qui n'est pas confirmé.
+     */
     @Transactional
     public void deletePayment(Long id) {
         requireManager();
@@ -173,13 +197,14 @@ public class PaymentService {
                 && invoice.getStatus() != InvoiceStatus.PARTIALLY_PAID) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Un paiement ne peut être enregistré que pour une facture ISSUED ou PARTIALLY_PAID"
+                    "Un paiement nécessite une facture ISSUED ou PARTIALLY_PAID"
             );
         }
     }
 
     private void validatePaymentAmount(Payment payment) {
         Invoice invoice = payment.getInvoice();
+
         BigDecimal alreadyPaid = paymentRepository
                 .findByInvoice_IdOrderByPaymentDateDesc(invoice.getId())
                 .stream()
@@ -188,9 +213,9 @@ public class PaymentService {
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal newTotal = alreadyPaid.add(payment.getAmount());
+        BigDecimal newPaidAmount = alreadyPaid.add(payment.getAmount());
 
-        if (newTotal.compareTo(invoice.getTotalAmount()) > 0) {
+        if (newPaidAmount.compareTo(invoice.getTotalAmount()) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Le total des paiements dépasse le montant de la facture"
@@ -217,13 +242,20 @@ public class PaymentService {
         invoiceRepository.save(invoice);
     }
 
+    /**
+     * MANAGER : accès global.
+     * FARMER : accès uniquement aux paiements de ses propres factures.
+     */
     private void requireReadAccess(Invoice invoice) {
         if (isManager()) {
             return;
         }
 
+        Long currentUserId = currentUserService.getCurrentUserId();
+
         if (isFarmer()
-                && invoice.getFarmerId().equals(currentUserService.getCurrentUserId())) {
+                && invoice.getFarmerUserId() != null
+                && invoice.getFarmerUserId().equals(currentUserId)) {
             return;
         }
 
@@ -244,12 +276,14 @@ public class PaymentService {
 
     private boolean isManager() {
         String role = currentUserService.getCurrentRole();
-        return "MANAGER".equals(role) || "ROLE_MANAGER".equals(role);
+        return "MANAGER".equals(role)
+                || "ROLE_MANAGER".equals(role);
     }
 
     private boolean isFarmer() {
         String role = currentUserService.getCurrentRole();
-        return "FARMER".equals(role) || "ROLE_FARMER".equals(role);
+        return "FARMER".equals(role)
+                || "ROLE_FARMER".equals(role);
     }
 
     private Invoice findInvoiceById(Long invoiceId) {
@@ -269,6 +303,13 @@ public class PaymentService {
     }
 
     private BigDecimal scale(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(
+                    MONEY_SCALE,
+                    ROUNDING_MODE
+            );
+        }
+
         return value.setScale(MONEY_SCALE, ROUNDING_MODE);
     }
 
