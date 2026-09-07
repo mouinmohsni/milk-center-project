@@ -32,19 +32,32 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // =====================================================
-                        // DRIVER : LECTURE DES RESSOURCES QUI PEUVENT LE CONCERNER
-                        // =====================================================
-                        // Les services doivent ensuite vérifier l'affectation réelle.
+
+
+
+                        .requestMatchers(
+
+                                HttpMethod.GET,
+                                "/api/route-stops/*"
+                        ).hasAnyRole("MANAGER","DRIVER","FARMER")
+
+                        .requestMatchers(
+
+                                HttpMethod.GET,
+                                "/api/routes/*",
+                                "/api/route-stops/route/*",
+                                "/api/route-stops/farmer/*",
+                                "/api/route-executions/*"
+
+                        ).hasAnyRole("MANAGER","DRIVER")
+
+
+
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/drivers/me",
-                                "/api/routes/*",
-                                "/api/route-stops/*",
-                                "/api/route-stops/route/*",
-                                "/api/route-stops/farmer/*",
-                                "/api/route-executions/*",
                                 "/api/route-executions/driver/*"
+
                         ).hasRole("DRIVER")
 
                         // =====================================================
@@ -54,7 +67,7 @@ public class SecurityConfig {
                         // bien à l'utilisateur présent dans le JWT.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/route-stops/*",
+
                                 "/api/route-stops/farmer/*"
                         ).hasRole("FARMER")
 
@@ -67,6 +80,8 @@ public class SecurityConfig {
                                 HttpMethod.PATCH,
                                 "/api/route-executions/*/status"
                         ).hasAnyRole("MANAGER", "DRIVER")
+
+
 
                         // =====================================================
                         // MANAGER : LECTURES ADMINISTRATIVES
@@ -84,7 +99,6 @@ public class SecurityConfig {
 
                                 // Routes
                                 "/api/routes",
-                                "/api/routes/",
                                 "/api/routes/driver/*",
                                 "/api/routes/vehicle/*",
                                 "/api/routes/status/*",

@@ -2,6 +2,7 @@ package org.milkcenter.fleetservice.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceCompleteRequest;
 import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceRecordRequest;
 import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceRecordUpdateRequest;
 import org.milkcenter.fleetservice.dto.response.MaintenanceRecordResponse;
@@ -41,6 +42,14 @@ public class MaintenanceRecordController {
             @Valid @RequestBody MaintenanceRecordUpdateRequest request
     ) {
         return ResponseEntity.ok(maintenanceRecordService.updateMaintenance(id, request));
+    }
+
+    @PatchMapping("/{id}/complete")
+    public ResponseEntity<MaintenanceRecordResponse> completeMaintenance(
+            @PathVariable Long id,
+            @Valid @RequestBody MaintenanceCompleteRequest request
+    ) {
+        return ResponseEntity.ok(maintenanceRecordService.completeMaintenance(id, request));
     }
 
     /**

@@ -28,7 +28,8 @@ public class MaintenanceRecordRequest {
 
     @DecimalMin("0.0")
     private BigDecimal cost;
-
+    @NotNull(message = "Le type de nom du garage est obligatoire")
     private String provider;
+
     private Long nextMaintenanceOdometer;
 }

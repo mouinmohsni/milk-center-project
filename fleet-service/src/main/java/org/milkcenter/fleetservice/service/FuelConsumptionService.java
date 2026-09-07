@@ -18,6 +18,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+
+
 @Service
 @RequiredArgsConstructor
 public class FuelConsumptionService {
@@ -26,15 +32,76 @@ public class FuelConsumptionService {
     private final VehicleRepository vehicleRepository;
     private final RouteExecutionRepository routeExecutionRepository;
 
+
+
+
+    private List<RouteExecution> loadAndValidateExecutions(
+            Long vehicleId,
+            List<Long> executionIds
+    ) {
+        if (executionIds == null || executionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> distinctIds = executionIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (distinctIds.size() != executionIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La liste des exécutions contient des identifiants invalides ou dupliqués"
+            );
+        }
+
+        List<RouteExecution> executions =
+                routeExecutionRepository.findAllById(distinctIds);
+
+        Set<Long> foundIds = executions.stream()
+                .map(RouteExecution::getId)
+                .collect(Collectors.toSet());
+
+        if (foundIds.size() != distinctIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Une ou plusieurs exécutions de route n'existent pas"
+            );
+        }
+
+        boolean belongsToAnotherVehicle = executions.stream()
+                .anyMatch(execution ->
+                        execution.getActualVehicle() == null
+                                || !vehicleId.equals(
+                                execution.getActualVehicle().getId()
+                        )
+                );
+
+        if (belongsToAnotherVehicle) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Une ou plusieurs exécutions n'appartiennent pas au véhicule sélectionné"
+            );
+        }
+
+        return executions;
+    }
+
+
     @Transactional
     public FuelConsumptionResponse createFuelConsumption(FuelConsumptionRequest request ) {
         Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Véhicule non trouvé"));
 
-        List<RouteExecution> executions = null;
-        if (request.getRouteExecutionIds() != null && !request.getRouteExecutionIds().isEmpty()) {
-            executions = routeExecutionRepository.findAllById(request.getRouteExecutionIds());
-        }
+
+        List<RouteExecution> executions =
+                loadAndValidateExecutions(
+                        vehicle.getId(),
+                        request.getRouteExecutionIds()
+                );
+
+
+
 
         FuelConsumption fuel = FuelConsumption.builder()
                 .vehicle(vehicle)
@@ -62,9 +129,15 @@ public class FuelConsumptionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Enregistrement non trouvé"));
 
         if (request.getRouteExecutionIds() != null) {
-            List<RouteExecution> executions = routeExecutionRepository.findAllById(request.getRouteExecutionIds());
+            List<RouteExecution> executions =
+                    loadAndValidateExecutions(
+                            fuel.getVehicle().getId(),
+                            request.getRouteExecutionIds()
+                    );
+
             fuel.setRouteExecutions(executions);
         }
+
         if (request.getFuelType() != null) fuel.setFuelType(request.getFuelType());
         if (request.getFuelDate() != null) fuel.setFuelDate(request.getFuelDate());
         if (request.getOdometer() != null) fuel.setOdometer(request.getOdometer());

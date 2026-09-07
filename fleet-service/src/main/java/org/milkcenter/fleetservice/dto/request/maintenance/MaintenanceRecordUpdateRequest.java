@@ -11,12 +11,12 @@ import java.util.Date;
 @AllArgsConstructor
 @Builder
 public class MaintenanceRecordUpdateRequest {
-    private MaintenanceType maintenanceType;
-    private MaintenanceStatus status;
-    private String description;
-    private Date maintenanceDate;
-    private Long odometer;
+    private MaintenanceType maintenanceType; //
+    private MaintenanceStatus status; //
+    private String description; //
+    private Date maintenanceDate; //
+    private Long odometer;//
     private BigDecimal cost;
-    private String provider;
+    private String provider; //
     private Long nextMaintenanceOdometer;
 }

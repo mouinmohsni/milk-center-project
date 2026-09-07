@@ -13,8 +13,9 @@ public class MilkCollectionRequest {
 
     @NotNull(message = "Le farmerId est obligatoire")
     private Long farmerId;
-
+    @NotNull(message = "Le routeStopId est obligatoire")
     private Long routeStopId;
+
 
     @NotNull(message = "La date de collecte est obligatoire")
     @PastOrPresent(message = "La date de collecte ne peut pas être dans le futur")

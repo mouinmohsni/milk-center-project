@@ -100,7 +100,9 @@ public class FarmerService {
     public FarmerProfileResponse deactivateFarmer(Long id) {
         FarmerProfile farmer = farmerRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agriculteur non trouvé"));
-        farmer.setActive(false);
+
+        farmer.setActive(!farmer.isActive());
+
         return mapToResponse(farmerRepository.save(farmer));
     }
 

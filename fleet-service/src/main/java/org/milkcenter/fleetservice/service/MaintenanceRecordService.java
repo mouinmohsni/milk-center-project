@@ -1,6 +1,7 @@
 package org.milkcenter.fleetservice.service;
 
 import lombok.RequiredArgsConstructor;
+import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceCompleteRequest;
 import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceRecordRequest;
 import org.milkcenter.fleetservice.dto.request.maintenance.MaintenanceRecordUpdateRequest;
 import org.milkcenter.fleetservice.dto.response.MaintenanceRecordResponse;
@@ -32,7 +33,7 @@ public class MaintenanceRecordService {
      * Seul le MANAGER peut gérer la maintenance.
      */
     private void checkManagerAccess( ) {
-        if (!"ROLE_MANAGER".equals(currentUserService.getCurrentRole())) {
+        if (!"MANAGER".equals(currentUserService.getCurrentRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Accès réservé aux gestionnaires");
         }
     }
@@ -52,6 +53,8 @@ public class MaintenanceRecordService {
                 .vehicle(vehicle)
                 .maintenanceType(request.getMaintenanceType())
                 .description(request.getDescription())
+                .provider(request.getProvider())
+                .odometer(request.getOdometer())
                 .maintenanceDate(request.getMaintenanceDate())
                 .status(MaintenanceStatus.IN_PROGRESS)
                 .build();
@@ -68,7 +71,7 @@ public class MaintenanceRecordService {
      * Statut final : COMPLETED. Statut véhicule : READY.
      */
     @Transactional
-    public MaintenanceRecordResponse completeMaintenance(Long id, MaintenanceRecordUpdateRequest request) {
+    public MaintenanceRecordResponse completeMaintenance(Long id, MaintenanceCompleteRequest request) {
         checkManagerAccess();
 
         MaintenanceRecord record = maintenanceRecordRepository.findById(id)
@@ -79,14 +82,13 @@ public class MaintenanceRecordService {
         }
 
         // Validation des données de clôture
-        if (request.getOdometer() == null || request.getCost() == null) {
+        if (request.getNextMaintenanceOdometer() == null || request.getCost() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Le kilométrage (odometer) et le coût sont obligatoires pour clôturer la maintenance");
         }
 
         record.setOdometer(request.getOdometer());
         record.setCost(request.getCost());
-        record.setProvider(request.getProvider());
         record.setNextMaintenanceOdometer(request.getNextMaintenanceOdometer());
         record.setStatus(MaintenanceStatus.COMPLETED);
 
@@ -120,9 +122,7 @@ public class MaintenanceRecordService {
 
         // Gestion du changement de statut via update
         if (request.getStatus() != null) {
-            if (request.getStatus() == MaintenanceStatus.COMPLETED) {
-                return completeMaintenance(id, request);
-            }
+
             if (request.getStatus() == MaintenanceStatus.CANCELLED && record.getStatus() == MaintenanceStatus.IN_PROGRESS) {
                 record.setStatus(MaintenanceStatus.CANCELLED);
                 Vehicle v = record.getVehicle();
@@ -136,6 +136,10 @@ public class MaintenanceRecordService {
         if (request.getDescription() != null) record.setDescription(request.getDescription());
         if (request.getMaintenanceDate() != null) record.setMaintenanceDate(request.getMaintenanceDate());
         if (request.getProvider() != null) record.setProvider(request.getProvider());
+        if (request.getOdometer() != null) record.setOdometer(request.getOdometer());
+        if (request.getCost() != null) record.setCost(request.getCost());
+        if (request.getNextMaintenanceOdometer() != null) record.setNextMaintenanceOdometer(request.getNextMaintenanceOdometer());
+
 
         return mapToResponse(maintenanceRecordRepository.save(record));
     }

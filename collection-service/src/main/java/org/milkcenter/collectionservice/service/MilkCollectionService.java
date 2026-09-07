@@ -1,9 +1,11 @@
 package org.milkcenter.collectionservice.service;
 
 import lombok.RequiredArgsConstructor;
+import org.milkcenter.collectionservice.client.RouteStopClient;
 import org.milkcenter.collectionservice.dto.request.CollectionValidationRequest;
 import org.milkcenter.collectionservice.dto.request.MilkCollectionRequest;
 import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
+import org.milkcenter.collectionservice.dto.response.client.RouteStopResponse;
 import org.milkcenter.collectionservice.enums.CollectionStatus;
 import org.milkcenter.collectionservice.model.MilkCollection;
 import org.milkcenter.collectionservice.repository.MilkCollectionRepository;
@@ -22,6 +24,7 @@ public class MilkCollectionService {
 
     private final MilkCollectionRepository collectionRepository;
     private final CurrentUserService currentUserService;
+    private final RouteStopClient routeStopClient ;
 
     private void checkCollectionOwnership(MilkCollection collection ) {
         String role = currentUserService.getCurrentRole();
@@ -37,6 +40,28 @@ public class MilkCollectionService {
             return mapToResponse(collectionRepository.findByIdempotencyKey(request.getIdempotencyKey())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur idempotence")));
         }
+
+        RouteStopResponse routeStop = routeStopClient.getRouteStopById(request.getRouteStopId());
+
+
+        if (routeStop == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Route stop introuvable"
+            );
+        }
+
+        if (!Objects.equals(
+                request.getFarmerId(),
+                routeStop.getFarmerId()
+        )) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Le route stop sélectionné n'appartient pas à ce fermier"
+            );
+        }
+
+
 
         MilkCollection collection = MilkCollection.builder()
                 .farmerId(request.getFarmerId())

@@ -35,6 +35,9 @@ public class PaymentService {
 
     /**
      * Enregistre un paiement en attente de confirmation.
+     *
+     * Les paiements PENDING et COMPLETED réservent une partie du montant
+     * de la facture. Les paiements FAILED et CANCELLED ne sont pas comptés.
      */
     @Transactional
     public PaymentResponse createPayment(
@@ -46,9 +49,14 @@ public class PaymentService {
         Invoice invoice = findInvoiceById(invoiceId);
         validateInvoiceForPayment(invoice);
 
+        BigDecimal amount = scale(request.getAmount());
+
+        validateReferenceForCreate(request.getReference());
+        validatePaymentAmountForInvoice(invoice, amount, null);
+
         Payment payment = Payment.builder()
                 .invoice(invoice)
-                .amount(scale(request.getAmount()))
+                .amount(amount)
                 .paymentDate(request.getPaymentDate())
                 .paymentMethod(request.getPaymentMethod())
                 .reference(request.getReference())
@@ -103,9 +111,27 @@ public class PaymentService {
             );
         }
 
+        BigDecimal newAmount = payment.getAmount();
+
         if (request.getAmount() != null) {
-            payment.setAmount(scale(request.getAmount()));
+            newAmount = scale(request.getAmount());
         }
+
+        // Le paiement en cours est exclu du cumul afin de ne pas le compter deux fois.
+        validatePaymentAmountForInvoice(
+                payment.getInvoice(),
+                newAmount,
+                payment.getId()
+        );
+
+        if (request.getReference() != null) {
+            validateReferenceForUpdate(
+                    request.getReference(),
+                    payment.getId()
+            );
+        }
+
+        payment.setAmount(newAmount);
 
         if (request.getPaymentDate() != null) {
             payment.setPaymentDate(request.getPaymentDate());
@@ -192,6 +218,9 @@ public class PaymentService {
         paymentRepository.delete(payment);
     }
 
+    /**
+     * Vérifie qu'une facture peut recevoir un paiement.
+     */
     private void validateInvoiceForPayment(Invoice invoice) {
         if (invoice.getStatus() != InvoiceStatus.ISSUED
                 && invoice.getStatus() != InvoiceStatus.PARTIALLY_PAID) {
@@ -202,32 +231,111 @@ public class PaymentService {
         }
     }
 
+    /**
+     * Vérifie le montant au moment de la confirmation d'un paiement.
+     */
     private void validatePaymentAmount(Payment payment) {
-        Invoice invoice = payment.getInvoice();
+        validatePaymentAmountForInvoice(
+                payment.getInvoice(),
+                payment.getAmount(),
+                payment.getId()
+        );
+    }
 
-        BigDecimal alreadyPaid = paymentRepository
+    /**
+     * Vérifie que le cumul des paiements réservés ne dépasse pas la facture.
+     *
+     * Les paiements PENDING et COMPLETED sont comptés.
+     * Les paiements FAILED et CANCELLED sont ignorés.
+     *
+     * @param invoice facture concernée
+     * @param newAmount nouveau montant à réserver
+     * @param excludedPaymentId paiement à exclure lors d'une mise à jour
+     */
+    private void validatePaymentAmountForInvoice(
+            Invoice invoice,
+            BigDecimal newAmount,
+            Long excludedPaymentId
+    ) {
+        if (newAmount == null
+                || newAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Le montant du paiement doit être supérieur à zéro"
+            );
+        }
+
+        BigDecimal alreadyReserved = paymentRepository
                 .findByInvoice_IdOrderByPaymentDateDesc(invoice.getId())
                 .stream()
-                .filter(existing -> existing.getStatus() == PaymentStatus.COMPLETED)
-                .filter(existing -> !existing.getId().equals(payment.getId()))
+                .filter(payment ->
+                        payment.getStatus() == PaymentStatus.PENDING
+                                || payment.getStatus()
+                                == PaymentStatus.COMPLETED
+                )
+                .filter(payment -> excludedPaymentId == null
+                        || !payment.getId().equals(excludedPaymentId))
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal newPaidAmount = alreadyPaid.add(payment.getAmount());
+        BigDecimal newTotal = alreadyReserved.add(newAmount);
 
-        if (newPaidAmount.compareTo(invoice.getTotalAmount()) > 0) {
+        if (newTotal.compareTo(invoice.getTotalAmount()) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Le total des paiements dépasse le montant de la facture"
+                    "Le total des paiements en attente et confirmés "
+                            + "dépasse le montant de la facture"
             );
         }
     }
 
+    /**
+     * Vérifie l'unicité de la référence lors d'une création.
+     */
+    private void validateReferenceForCreate(String reference) {
+        if (reference == null || reference.isBlank()) {
+            return;
+        }
+
+        if (paymentRepository.existsByReference(reference)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Cette référence de paiement existe déjà"
+            );
+        }
+    }
+
+    /**
+     * Vérifie l'unicité de la référence lors d'une modification.
+     */
+    private void validateReferenceForUpdate(
+            String reference,
+            Long paymentId
+    ) {
+        if (reference == null || reference.isBlank()) {
+            return;
+        }
+
+        if (paymentRepository.existsByReferenceAndIdNot(
+                reference,
+                paymentId
+        )) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Cette référence de paiement existe déjà"
+            );
+        }
+    }
+
+    /**
+     * Recalcule le statut de la facture après la confirmation d'un paiement.
+     */
     private void recalculateInvoiceStatus(Invoice invoice) {
         BigDecimal paidAmount = paymentRepository
                 .findByInvoice_IdOrderByPaymentDateDesc(invoice.getId())
                 .stream()
-                .filter(payment -> payment.getStatus() == PaymentStatus.COMPLETED)
+                .filter(payment -> payment.getStatus()
+                        == PaymentStatus.COMPLETED)
                 .map(Payment::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -265,6 +373,9 @@ public class PaymentService {
         );
     }
 
+    /**
+     * Vérifie que l'utilisateur connecté est manager.
+     */
     private void requireManager() {
         if (!isManager()) {
             throw new ResponseStatusException(

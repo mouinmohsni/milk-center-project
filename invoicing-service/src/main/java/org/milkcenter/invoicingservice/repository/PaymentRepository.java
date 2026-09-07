@@ -10,13 +10,11 @@ import java.util.List;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
-    /**
-     * Liste les paiements d'une facture.
-     */
     List<Payment> findByInvoice_IdOrderByPaymentDateDesc(Long invoiceId);
 
-    /**
-     * Liste les paiements selon leur statut.
-     */
     List<Payment> findByStatus(PaymentStatus status);
+
+    boolean existsByReference(String reference);
+
+    boolean existsByReferenceAndIdNot(String reference, Long id);
 }
