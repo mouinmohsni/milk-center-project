@@ -1,0 +1,275 @@
+services:
+
+  # =====================================================
+  # Bases de données MySQL
+  # =====================================================
+
+  identity-db:
+    image: mysql:8.0
+    container_name: milkcenter-identity-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${IDENTITY_DB_NAME}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+      - identity-db-data:/var/lib/mysql
+    networks:
+      - milkcenter-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  collection-db:
+    image: mysql:8.0
+    container_name: milkcenter-collection-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${COLLECTION_DB_NAME}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3308:3306"
+    volumes:
+      - collection-db-data:/var/lib/mysql
+    networks:
+      - milkcenter-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  fleet-db:
+    image: mysql:8.0
+    container_name: milkcenter-fleet-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${FLEET_DB_NAME}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3309:3306"
+    volumes:
+      - fleet-db-data:/var/lib/mysql
+    networks:
+      - milkcenter-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  invoicing-db:
+    image: mysql:8.0
+    container_name: milkcenter-invoicing-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${INVOICING_DB_NAME}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3310:3306"
+    volumes:
+      - invoicing-db-data:/var/lib/mysql
+    networks:
+      - milkcenter-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =====================================================
+  # Eureka Discovery Server
+  # =====================================================
+
+  discovery-server:
+    image: milkcenter/discovery-server:1.0
+    container_name: milkcenter-discovery-server
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    environment:
+      SERVER_PORT: 8761
+      EUREKA_INSTANCE_HOSTNAME: discovery-server
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "false"
+    networks:
+      - milkcenter-network
+
+  # =====================================================
+  # Identity Service
+  # =====================================================
+
+  identity-service:
+    image: milkcenter/identity-service:1.0
+    container_name: milkcenter-identity-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:mysql://identity-db:3306/${IDENTITY_DB_NAME}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: identity-service
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+    depends_on:
+      identity-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+    networks:
+      - milkcenter-network
+
+  # =====================================================
+  # Collection Service
+  # =====================================================
+
+  collection-service:
+    image: milkcenter/collection-service:1.0
+    container_name: milkcenter-collection-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:mysql://collection-db:3306/${COLLECTION_DB_NAME}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: collection-service
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+    depends_on:
+      collection-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+    networks:
+      - milkcenter-network
+
+  # =====================================================
+  # Fleet Service
+  # =====================================================
+
+  fleet-service:
+    image: milkcenter/fleet-service:1.0
+    container_name: milkcenter-fleet-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:mysql://fleet-db:3306/${FLEET_DB_NAME}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: fleet-service
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+    depends_on:
+      fleet-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+    networks:
+      - milkcenter-network
+
+  # =====================================================
+  # Invoicing Service
+  # =====================================================
+
+  invoicing-service:
+    image: milkcenter/invoicing-service:1.0
+    container_name: milkcenter-invoicing-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      SERVER_PORT: 8084
+      SPRING_DATASOURCE_URL: jdbc:mysql://invoicing-db:3306/${INVOICING_DB_NAME}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: invoicing-service
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+      SERVER_ERROR_INCLUDE_MESSAGE: always
+    depends_on:
+      invoicing-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+    networks:
+      - milkcenter-network
+
+  # =====================================================
+  # API Gateway
+  # =====================================================
+
+  api-gateway:
+    image: milkcenter/api-gateway:1.0
+    container_name: milkcenter-api-gateway
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      SERVER_PORT: 9000
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      EUREKA_INSTANCE_HOSTNAME: api-gateway
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+    depends_on:
+      discovery-server:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      collection-service:
+        condition: service_started
+      fleet-service:
+        condition: service_started
+      invoicing-service:
+        condition: service_started
+    networks:
+      - milkcenter-network
+
+# =====================================================
+# Volumes persistants
+# =====================================================
+
+volumes:
+  identity-db-data:
+  collection-db-data:
+  fleet-db-data:
+  invoicing-db-data:
+
+# =====================================================
+# Réseau interne
+# =====================================================
+
+networks:
+  milkcenter-network:
+    driver: bridge

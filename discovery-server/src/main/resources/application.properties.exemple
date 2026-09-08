@@ -1,6 +1,34 @@
-spring.application.name=discovery-server
-server.port=8761
+# =====================================================
+# Discovery Server - Eureka
+# =====================================================
 
-# Eureka ne s'enregistre pas lui-même (il est LE serveur)
+# Nom de l'application
+spring.application.name=discovery-server
+
+# =====================================================
+# Serveur HTTP
+# =====================================================
+
+# En local : 8761
+# Dans Docker Compose : SERVER_PORT=8761
+server.port=${SERVER_PORT:8761}
+
+# =====================================================
+# Configuration Eureka Server
+# =====================================================
+
+# Le serveur Eureka ne s'enregistre pas auprès de lui-même.
 eureka.client.register-with-eureka=false
 eureka.client.fetch-registry=false
+
+# Adresse logique utilisée par les autres conteneurs.
+# En local, localhost convient ; dans Docker Compose,
+# le nom du service est discovery-server.
+eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
+eureka.instance.prefer-ip-address=${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
+
+# =====================================================
+# Gestion des erreurs
+# =====================================================
+
+server.error.include-message=${SERVER_ERROR_INCLUDE_MESSAGE:always}

@@ -1,23 +1,60 @@
+# =====================================================
+# Fleet Service
+# =====================================================
 
-
+# Nom de l'application
 spring.application.name=fleet-service
-server.port=8083
 
-jwt.secret=jwt.secret
+# =====================================================
+# Serveur HTTP
+# =====================================================
 
-# Base de données
-spring.datasource.url=jdbc:mysql://localhost:3306/milk_fleet_db?createDatabaseIfNotExist=true
-spring.datasource.username=votre_mot_de_passe
-spring.datasource.password=votre_mot_de_passe
+# En local : 8083
+# Dans Docker Compose : SERVER_PORT=8083
+server.port=${SERVER_PORT:8083}
 
+# =====================================================
+# JWT
+# =====================================================
+
+# Le secret doit être identique à celui utilisé par identity-service
+# et par les services qui valident les JWT.
+jwt.secret=${JWT_SECRET:**********}
+
+# =====================================================
+# Base de données MySQL
+# =====================================================
+
+# En local : localhost et milk_fleet_db.
+# Dans Docker Compose, l'URL sera remplacée par celle utilisant
+# le nom du service Docker : fleet-db.
+spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_fleet_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:*****}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:*****}
+
+# =====================================================
 # JPA / Hibernate
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
+# =====================================================
 
-# Eureka
-eureka.client.service-url.defaultZone=http://localhost:8761/eureka/
-eureka.instance.hostname=localhost
-eureka.instance.ip-address=127.0.0.1
+spring.jpa.hibernate.ddl-auto=${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+spring.jpa.show-sql=${SPRING_JPA_SHOW_SQL:true}
+spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.dialect.MySQLDialect}
 
-server.error.include-message=always
+# =====================================================
+# Eureka Discovery Server
+# =====================================================
 
+# En local : http://localhost:8761/eureka/
+# Dans Docker Compose : http://discovery-server:8761/eureka/
+eureka.client.service-url.defaultZone=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+eureka.client.register-with-eureka=${EUREKA_CLIENT_REGISTER_WITH_EUREKA:true}
+eureka.client.fetch-registry=${EUREKA_CLIENT_FETCH_REGISTRY:true}
+
+eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
+eureka.instance.prefer-ip-address=${EUREEKA_INSTANCE_PREFER_IP_ADDRESS:false}
+
+# =====================================================
+# Gestion des erreurs
+# =====================================================
+
+server.error.include-message=${SERVER_ERROR_INCLUDE_MESSAGE:always}

@@ -1,25 +1,60 @@
+# =====================================================
+# Identity Service
+# =====================================================
 
+# Nom de l'application
 spring.application.name=identity-service
 
-# Configuration de la base de données MySQL
-spring.datasource.url=jdbc:mysql://localhost:3306/nom_base_de_donner?createDatabaseIfNotExist=true
-spring.datasource.username=**********
+# =====================================================
+# Serveur HTTP
+# =====================================================
 
+# En local : 8081
+# Dans Docker Compose : SERVER_PORT=8081
+server.port=${SERVER_PORT:8081}
 
-spring.datasource.password=*********
+# =====================================================
+# Base de données MySQL
+# =====================================================
 
+# En local, le service utilise localhost.
+# Dans Docker Compose, cette valeur est remplacée par :
+# jdbc:mysql://identity-db:3306/identity_db?...
+spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_identity_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+
+# En local : root/root
+# Dans Docker Compose : milkcenter/milkcenter_password
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:********}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:********}
+
+# =====================================================
 # Hibernate / JPA
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+# =====================================================
 
-# Port du serveur (on change le port par défaut 8080 pour éviter les conflits)
-server.port=8081
+spring.jpa.hibernate.ddl-auto=${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+spring.jpa.show-sql=${SPRING_JPA_SHOW_SQL:true}
+spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.dialect.MySQLDialect}
 
-jwt.secret=****************
+# =====================================================
+# JWT
+# =====================================================
 
-# Configuration Eureka
-eureka.client.service-url.defaultZone=http://localhost:8761/eureka/
-eureka.client.register-with-eureka=true
-eureka.client.fetch-registry=true
+# En production, il est préférable de fournir JWT_SECRET
+# dans Docker Compose plutôt que de conserver le secret en clair.
+jwt.secret=${JWT_SECRET:******************************}
 
+# =====================================================
+# Eureka Discovery Server
+# =====================================================
+
+# En local : http://localhost:8761/eureka/
+# Dans Docker Compose : http://discovery-server:8761/eureka/
+eureka.client.service-url.defaultZone=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+eureka.client.register-with-eureka=${EUREKA_CLIENT_REGISTER_WITH_EUREKA:true}
+eureka.client.fetch-registry=${EUREKA_CLIENT_FETCH_REGISTRY:true}
+
+# En local : localhost
+# Dans Docker Compose : discovery-server
+# Ne forcez pas 127.0.0.1 dans le conteneur.
+eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
+eureka.instance.prefer-ip-address=${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}

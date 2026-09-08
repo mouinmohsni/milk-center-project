@@ -55,6 +55,16 @@ out/
 mvnw
 mvnw.cmd
 
+# Secrets locaux et variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Données et fichiers Docker locaux
+mysql-data/
+*.log
+
+
 # Divers
 .DS_Store
 Thumbs.db
