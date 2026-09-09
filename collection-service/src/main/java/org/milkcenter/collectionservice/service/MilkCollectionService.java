@@ -1,7 +1,8 @@
 package org.milkcenter.collectionservice.service;
 
 import lombok.RequiredArgsConstructor;
-import org.milkcenter.collectionservice.client.RouteStopClient;
+import org.milkcenter.collectionservice.dto.response.CollectionCreationResult;
+import org.milkcenter.collectionservice.service.RouteStopResilientClient;
 import org.milkcenter.collectionservice.dto.request.CollectionValidationRequest;
 import org.milkcenter.collectionservice.dto.request.MilkCollectionRequest;
 import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
@@ -24,7 +25,7 @@ public class MilkCollectionService {
 
     private final MilkCollectionRepository collectionRepository;
     private final CurrentUserService currentUserService;
-    private final RouteStopClient routeStopClient ;
+    private final RouteStopResilientClient routeStopResilientClient ;
 
     private void checkCollectionOwnership(MilkCollection collection ) {
         String role = currentUserService.getCurrentRole();
@@ -35,21 +36,41 @@ public class MilkCollectionService {
         }
     }
 
-    public MilkCollectionResponse createCollection(MilkCollectionRequest request) {
-        if (collectionRepository.existsByIdempotencyKey(request.getIdempotencyKey())) {
-            return mapToResponse(collectionRepository.findByIdempotencyKey(request.getIdempotencyKey())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur idempotence")));
-        }
+    public CollectionCreationResult createCollection(MilkCollectionRequest request) {
+        Optional<MilkCollection> existingCollection =
+                collectionRepository.findByIdempotencyKey(
+                        request.getIdempotencyKey()
+                );
 
-        RouteStopResponse routeStop = routeStopClient.getRouteStopById(request.getRouteStopId());
+        if (existingCollection.isPresent()) {
+            MilkCollection existing = existingCollection.get();
 
+            boolean sameRequest =
+                    Objects.equals(existing.getFarmerId(), request.getFarmerId())
+                            && Objects.equals(existing.getRouteStopId(), request.getRouteStopId())
+                            && Objects.equals(existing.getCollectedAt(), request.getCollectedAt())
+                            && Objects.equals(existing.getQuantityLiters(), request.getQuantityLiters())
+                            && Objects.equals(existing.getTemperatureCelsius(), request.getTemperatureCelsius())
+                            && Objects.equals(existing.getQualityNotes(), request.getQualityNotes())
+                            && Objects.equals(existing.getNotes(), request.getNotes());
 
-        if (routeStop == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Route stop introuvable"
+            if (!sameRequest) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Cette idempotencyKey est déjà utilisée pour une autre collecte"
+                );
+            }
+
+            return new CollectionCreationResult(
+                    mapToResponse(existing),
+                    true
             );
         }
+
+
+        RouteStopResponse routeStop = routeStopResilientClient.getRouteStopById(request.getRouteStopId());
+
+
 
         if (!Objects.equals(
                 request.getFarmerId(),
@@ -77,7 +98,13 @@ public class MilkCollectionService {
                 .correctionCount(0)
                 .build();
 
-        return mapToResponse(collectionRepository.save(collection));
+        MilkCollection savedCollection = collectionRepository.save(collection);
+
+        return new CollectionCreationResult(
+                mapToResponse(savedCollection),
+                false
+        );
+
     }
 
     public List<MilkCollectionResponse> getAllCollections() {

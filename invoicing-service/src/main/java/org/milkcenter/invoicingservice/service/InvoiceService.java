@@ -1,8 +1,7 @@
 package org.milkcenter.invoicingservice.service;
 
-import feign.FeignException;
+
 import lombok.RequiredArgsConstructor;
-import org.milkcenter.invoicingservice.client.CollectionServiceClient;
 import org.milkcenter.invoicingservice.dto.request.InvoiceCreateRequest;
 import org.milkcenter.invoicingservice.dto.request.InvoiceLineRequest;
 import org.milkcenter.invoicingservice.dto.request.InvoiceStatusUpdateRequest;
@@ -45,7 +44,7 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
     private final CurrentUserService currentUserService;
-    private final CollectionServiceClient collectionServiceClient;
+    private final CollectionServiceResilientClient collectionServiceClient;
     private final PricingConfigurationService pricingConfigurationService;
 
     @Transactional
@@ -254,20 +253,15 @@ public class InvoiceService {
                         billingDate
                 );
 
-        MonthlyMilkTotalClientResponse milkTotal;
 
-        try {
-            milkTotal = collectionServiceClient.getMonthlyMilkTotal(
-                    request.getFarmerId(),
-                    request.getBillingMonth(),
-                    request.getBillingYear()
-            );
-        } catch (FeignException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "Impossible de récupérer le total mensuel de lait"
-            );
-        }
+
+        MonthlyMilkTotalClientResponse milkTotal =
+                collectionServiceClient.getMonthlyMilkTotal(
+                        request.getFarmerId(),
+                        request.getBillingMonth(),
+                        request.getBillingYear()
+                );
+
 
         if (milkTotal == null
                 || milkTotal.getTotalQuantityLiters() == null

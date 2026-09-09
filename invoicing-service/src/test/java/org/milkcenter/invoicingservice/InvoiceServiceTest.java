@@ -2,7 +2,7 @@ package org.milkcenter.invoicingservice;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.milkcenter.invoicingservice.client.CollectionServiceClient;
+import org.milkcenter.invoicingservice.service.CollectionServiceResilientClient;
 import org.milkcenter.invoicingservice.dto.request.InvoiceCreateRequest;
 import org.milkcenter.invoicingservice.dto.response.InvoiceResponse;
 import org.milkcenter.invoicingservice.dto.response.client.MonthlyMilkTotalClientResponse;
@@ -34,7 +34,7 @@ class InvoiceServiceTest {
     private CurrentUserService currentUserService;
 
     @Mock
-    private CollectionServiceClient collectionServiceClient;
+    private CollectionServiceResilientClient collectionServiceResilientClient;
 
     @Mock
     private PricingConfigurationService pricingConfigurationService;
@@ -74,7 +74,7 @@ class InvoiceServiceTest {
                 LocalDate.of(2026, 9, 1)
         )).thenReturn(configuration);
 
-        when(collectionServiceClient.getMonthlyMilkTotal(20L, 9, 2026))
+        when(collectionServiceResilientClient.getMonthlyMilkTotal(20L, 9, 2026))
                 .thenReturn(new MonthlyMilkTotalClientResponse(
                         20L,
                         9,

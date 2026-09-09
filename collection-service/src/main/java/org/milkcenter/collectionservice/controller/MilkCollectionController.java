@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.milkcenter.collectionservice.dto.request.CollectionValidationRequest;
 import org.milkcenter.collectionservice.dto.request.MilkCollectionRequest;
+import org.milkcenter.collectionservice.dto.response.CollectionCreationResult;
 import org.milkcenter.collectionservice.dto.response.FarmerProfileResponse;
 import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
 import org.milkcenter.collectionservice.dto.response.MonthlyMilkTotalResponse;
@@ -34,11 +35,19 @@ public class MilkCollectionController {
     public ResponseEntity<MilkCollectionResponse> createCollection(
             @Valid @RequestBody MilkCollectionRequest request) {
 
-        MilkCollectionResponse response =
+        CollectionCreationResult result =
                 collectionService.createCollection(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        if (result.replayed()) {
+            return ResponseEntity.ok()
+                    .header("Idempotency-Replayed", "true")
+                    .body(result.response());
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(result.response());
     }
+
 
     @GetMapping
     public ResponseEntity<List<MilkCollectionResponse>> getAllCollections() {
