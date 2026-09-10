@@ -45,4 +45,12 @@ public interface MilkCollectionRepository extends JpaRepository<MilkCollection, 
 
     @Query("SELECT mc FROM MilkCollection mc WHERE mc.farmerId = :farmerId ORDER BY mc.collectedAt DESC")
     List<MilkCollection> findLatestByFarmerId(@Param("farmerId") Long farmerId);
+
+    List<MilkCollection> findByFarmerIdAndStatusAndCollectedAtBetweenOrderByCollectedAtAsc(
+            Long farmerId,
+            CollectionStatus status,
+            Date start,
+            Date end
+    );
+
 }

@@ -27,6 +27,9 @@ public class InvoiceLineRequest {
     @Size(max = 255, message = "La description ne doit pas dépasser 255 caractères")
     private String description;
 
+    private Long milkCollectionId;
+
+
     /**
      * Exemple : SAC, KG ou LITRE.
      * Pour FEED_SALE, cette valeur aide à rechercher la configuration.

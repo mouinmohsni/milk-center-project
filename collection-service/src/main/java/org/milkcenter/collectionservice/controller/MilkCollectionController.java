@@ -127,6 +127,27 @@ public class MilkCollectionController {
         );
     }
 
+    /**
+     * Retourne les collectes ACCEPTED détaillées d'un fermier
+     * pour un mois et une année donnés.
+     */
+    @GetMapping("/farmer/{farmerId}/accepted")
+    public ResponseEntity<List<MilkCollectionResponse>> getMonthlyAcceptedCollections(
+            @PathVariable Long farmerId,
+            @RequestParam int month,
+            @RequestParam int year
+    ) {
+        List<MilkCollectionResponse> collections =
+                collectionService.getMonthlyAcceptedCollections(
+                        farmerId,
+                        month,
+                        year
+                );
+
+        return ResponseEntity.ok(collections);
+    }
+
+
     @PutMapping("/{id}/validate")
     public ResponseEntity<MilkCollectionResponse> validateCollection(
             @PathVariable Long id,

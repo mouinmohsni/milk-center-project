@@ -258,6 +258,63 @@ public class MilkCollectionService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Retourne les collectes ACCEPTED d'un fermier pour un mois donné.
+     * Cette méthode est destinée à la facturation détaillée.
+     */
+    public List<MilkCollectionResponse> getMonthlyAcceptedCollections(
+            Long farmerId,
+            int month,
+            int year
+    ) {
+        if (farmerId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "L'identifiant du fermier est obligatoire"
+            );
+        }
+
+        if (month < 1 || month > 12) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Le mois doit être compris entre 1 et 12"
+            );
+        }
+
+        if (year < 2000 || year > 2100) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "L'année est invalide"
+            );
+        }
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.clear();
+        calendar.set(year, month - 1, 1, 0, 0, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+
+        Date start = calendar.getTime();
+
+        calendar.add(Calendar.MONTH, 1);
+        calendar.add(Calendar.MILLISECOND, -1);
+
+        Date end = calendar.getTime();
+
+        List<MilkCollection> collections =
+                collectionRepository
+                        .findByFarmerIdAndStatusAndCollectedAtBetweenOrderByCollectedAtAsc(
+                                farmerId,
+                                CollectionStatus.ACCEPTED,
+                                start,
+                                end
+                        );
+
+        return collections.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+
     private MilkCollectionResponse mapToResponse(MilkCollection collection) {
         return MilkCollectionResponse.builder()
                 .id(collection.getId())

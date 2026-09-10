@@ -8,7 +8,8 @@ import org.milkcenter.invoicingservice.dto.request.InvoiceStatusUpdateRequest;
 import org.milkcenter.invoicingservice.dto.request.InvoiceUpdateRequest;
 import org.milkcenter.invoicingservice.dto.response.InvoiceLineResponse;
 import org.milkcenter.invoicingservice.dto.response.InvoiceResponse;
-import org.milkcenter.invoicingservice.dto.response.client.MonthlyMilkTotalClientResponse;
+import org.milkcenter.invoicingservice.dto.response.client.MilkCollectionClientResponse;
+
 import org.milkcenter.invoicingservice.enums.InvoiceStatus;
 import org.milkcenter.invoicingservice.enums.InvoiceType;
 import org.milkcenter.invoicingservice.enums.SaleUnit;
@@ -28,6 +29,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -53,6 +56,10 @@ public class InvoiceService {
 
         if (request == null) {
             throw badRequest("Les données de la facture sont obligatoires");
+        }
+
+        if (request.getInvoiceType() == null) {
+            throw badRequest("Le type de facture est obligatoire");
         }
 
         boolean exists = invoiceRepository
@@ -97,6 +104,55 @@ public class InvoiceService {
         updateInvoiceTaxRateFromLines(invoice);
         recalculateTotals(invoice);
 
+        return mapToResponse(invoiceRepository.save(invoice));
+    }
+
+    @Transactional
+    public InvoiceResponse createScheduledDraftInvoice(
+            Long farmerId,
+            Long farmerUserId,
+            Integer billingMonth,
+            Integer billingYear
+    ) {
+        if (farmerId == null || farmerUserId == null) {
+            throw badRequest("Les identifiants du farmer sont obligatoires");
+        }
+
+        validatePeriod(billingMonth, billingYear);
+
+        boolean exists = invoiceRepository
+                .existsByFarmerIdAndInvoiceTypeAndBillingMonthAndBillingYear(
+                        farmerId,
+                        InvoiceType.MILK_PURCHASE,
+                        billingMonth,
+                        billingYear
+                );
+
+        if (exists) {
+            return invoiceRepository
+                    .findByFarmerIdAndInvoiceTypeAndBillingMonthAndBillingYear(
+                            farmerId,
+                            InvoiceType.MILK_PURCHASE,
+                            billingMonth,
+                            billingYear
+                    )
+                    .map(this::mapToResponse)
+                    .orElseThrow();
+        }
+
+        Invoice invoice = Invoice.builder()
+                .invoiceNumber(generateInvoiceNumber())
+                .farmerId(farmerId)
+                .farmerUserId(farmerUserId)
+                .invoiceType(InvoiceType.MILK_PURCHASE)
+                .status(InvoiceStatus.DRAFT)
+                .billingMonth(billingMonth)
+                .billingYear(billingYear)
+                .taxRate(BigDecimal.ZERO.setScale(2, ROUNDING_MODE))
+                .notes("Facture DRAFT créée automatiquement")
+                .build();
+
+        // La facture peut rester vide. Kafka ajoutera les lignes ACCEPTED.
         return mapToResponse(invoiceRepository.save(invoice));
     }
 
@@ -166,7 +222,9 @@ public class InvoiceService {
         }
 
         if (request.getLines() != null) {
-            invoice.getLines().clear();
+            for (InvoiceLine existingLine : new ArrayList<>(invoice.getLines())) {
+                invoice.removeLine(existingLine);
+            }
 
             if (invoice.getInvoiceType() == InvoiceType.MILK_PURCHASE) {
                 addMilkLine(invoice, createInternalRequestFromInvoice(invoice));
@@ -189,6 +247,11 @@ public class InvoiceService {
         requireManager();
 
         Invoice invoice = findInvoiceById(id);
+
+        if (request == null || request.getStatus() == null) {
+            throw badRequest("Le nouveau statut est obligatoire");
+        }
+
         InvoiceStatus currentStatus = invoice.getStatus();
         InvoiceStatus newStatus = request.getStatus();
 
@@ -253,38 +316,58 @@ public class InvoiceService {
                         billingDate
                 );
 
-
-
-        MonthlyMilkTotalClientResponse milkTotal =
-                collectionServiceClient.getMonthlyMilkTotal(
+        List<MilkCollectionClientResponse> collections =
+                collectionServiceClient.getMonthlyAcceptedCollections(
                         request.getFarmerId(),
                         request.getBillingMonth(),
                         request.getBillingYear()
                 );
 
-
-        if (milkTotal == null
-                || milkTotal.getTotalQuantityLiters() == null
-                || milkTotal.getTotalQuantityLiters()
-                .compareTo(BigDecimal.ZERO) <= 0) {
+        if (collections == null || collections.isEmpty()) {
             throw badRequest(
-                    "Aucune quantité de lait ACCEPTED n'est disponible pour cette période"
+                    "Aucune collecte de lait ACCEPTED n'est disponible pour cette période"
             );
         }
 
-        InvoiceLine line = buildLineFromConfiguration(
-                invoice,
-                configuration.getProductName()
-                        + " - "
-                        + request.getBillingMonth()
-                        + "/"
-                        + request.getBillingYear(),
-                milkTotal.getTotalQuantityLiters(),
-                configuration
-        );
+        Set<Long> collectionIds = new HashSet<>();
 
-        invoice.addLine(line);
+        for (MilkCollectionClientResponse collection : collections) {
+            if (collection == null || collection.getId() == null) {
+                throw badRequest(
+                        "Une collecte reçue ne possède pas d'identifiant"
+                );
+            }
+
+            if (!collectionIds.add(collection.getId())) {
+                throw badRequest(
+                        "La collecte #" + collection.getId()
+                                + " apparaît plusieurs fois dans la réponse"
+                );
+            }
+
+            if (collection.getQuantityLiters() == null
+                    || collection.getQuantityLiters().compareTo(BigDecimal.ZERO) <= 0) {
+                throw badRequest(
+                        "La quantité d'une collecte doit être supérieure à zéro"
+                );
+            }
+
+            String description = configuration.getProductName()
+                    + " - collecte #"
+                    + collection.getId();
+
+            InvoiceLine line = buildLineFromConfiguration(
+                    invoice,
+                    collection.getId(),
+                    description,
+                    collection.getQuantityLiters(),
+                    configuration
+            );
+
+            invoice.addLine(line);
+        }
     }
+
 
     private void addFeedLines(
             Invoice invoice,
@@ -326,16 +409,19 @@ public class InvoiceService {
             invoice.addLine(
                     buildLineFromConfiguration(
                             invoice,
+                            null,
                             request.getDescription(),
                             request.getQuantity(),
                             configuration
                     )
+
             );
         }
     }
 
     private InvoiceLine buildLineFromConfiguration(
             Invoice invoice,
+            Long milkCollectionId,
             String description,
             BigDecimal quantity,
             PricingConfiguration configuration
@@ -347,6 +433,7 @@ public class InvoiceService {
 
         BigDecimal unitPrice = configuration.getUnitPrice()
                 .setScale(PRICE_SCALE, ROUNDING_MODE);
+
         BigDecimal taxRate = configuration.getTaxRate()
                 .setScale(2, ROUNDING_MODE);
 
@@ -368,6 +455,7 @@ public class InvoiceService {
 
         return InvoiceLine.builder()
                 .invoice(invoice)
+                .milkCollectionId(milkCollectionId)
                 .pricingConfigurationId(configuration.getId())
                 .description(description)
                 .unit(configuration.getSaleUnit().name())
@@ -380,6 +468,7 @@ public class InvoiceService {
                 .totalAmount(totalAmount)
                 .build();
     }
+
 
     private void recalculateTotals(Invoice invoice) {
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -408,6 +497,20 @@ public class InvoiceService {
             );
         }
     }
+
+
+
+
+    private void validatePeriod(Integer month, Integer year) {
+        if (month == null || month < 1 || month > 12) {
+            throw badRequest("Le mois de facturation est invalide");
+        }
+
+        if (year == null || year < 2000 || year > 2100) {
+            throw badRequest("L'année de facturation est invalide");
+        }
+    }
+
 
     private InvoiceCreateRequest createInternalRequestFromInvoice(
             Invoice invoice
@@ -610,6 +713,7 @@ public class InvoiceService {
     private InvoiceLineResponse mapLineToResponse(InvoiceLine line) {
         return InvoiceLineResponse.builder()
                 .id(line.getId())
+                .milkCollectionId(line.getMilkCollectionId())
                 .pricingConfigurationId(line.getPricingConfigurationId())
                 .description(line.getDescription())
                 .unit(line.getUnit())
@@ -622,4 +726,5 @@ public class InvoiceService {
                 .totalAmount(line.getTotalAmount())
                 .build();
     }
+
 }

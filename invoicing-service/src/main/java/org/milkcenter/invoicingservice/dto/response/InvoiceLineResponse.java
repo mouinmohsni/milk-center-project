@@ -20,6 +20,7 @@ public class InvoiceLineResponse {
     /** Référence logique de la configuration utilisée. */
     private Long pricingConfigurationId;
 
+    private Long milkCollectionId;
     private String description;
     private String unit;
     private BigDecimal packageWeightKg;
