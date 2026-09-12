@@ -3,19 +3,25 @@ package org.milkcenter.identityservice.repository;
 import org.milkcenter.identityservice.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
 import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    // Recherche un utilisateur par son username (Retourne un Optional pour éviter les NullPointerException)
     Optional<User> findByUsername(String username);
 
-    // Vérifie si un email existe déjà dans la base de données
+    Optional<User> findByEmail(String email);
+
     Optional<User> findByPhoneNumber(String phoneNumber);
+
+    Optional<User> findByKeycloakUserId(String keycloakUserId);
 
     boolean existsByUsername(String username);
 
+    boolean existsByEmail(String email);
+
     boolean existsByPhoneNumber(String phoneNumber);
 
+    boolean existsByKeycloakUserId(String keycloakUserId);
 }

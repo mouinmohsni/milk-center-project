@@ -383,6 +383,9 @@ public class RouteStopService {
      * Réserve les opérations d'écriture et les recherches globales au MANAGER.
      */
     private void requireManager() {
+
+         long user_id = currentUserService.getCurrentUserId();
+         System.out.println("user_id=============================> " +user_id);
         if (!"MANAGER".equals(currentUserService.getCurrentRole())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,

@@ -1,7 +1,6 @@
 package org.milkcenter.collectionservice.config;
 
 import jakarta.servlet.http.HttpServletResponse;
-import org.milkcenter.collectionservice.filter.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -9,17 +8,17 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            JwtAuthFilter jwtAuthFilter
+            @Bean
+            public SecurityFilterChain securityFilterChain(
+                    HttpSecurity http
     ) throws Exception {
+
 
         http
                 .csrf(csrf -> csrf.disable( ))
@@ -38,7 +37,7 @@ public class SecurityConfig {
 
                         // Consultation (DRIVER en a besoin pour identifier les fermes sur sa route)
                         .requestMatchers(HttpMethod.GET, "/api/farmers/**")
-                        .hasAnyRole("MANAGER", "DRIVER")
+                        .hasAnyRole("MANAGER", "DRIVER","AUTOSERVICE")
 
                         // Gestion administrative
                         .requestMatchers(HttpMethod.PUT, "/api/farmers/*")
@@ -55,24 +54,24 @@ public class SecurityConfig {
 
                         // Opérations Chauffeur
                         .requestMatchers(HttpMethod.POST, "/api/collections").hasRole("DRIVER")
-                        .requestMatchers(HttpMethod.GET, "/api/collections/route-stop/*").hasAnyRole("MANAGER", "DRIVER")
+                        .requestMatchers(HttpMethod.GET, "/api/collections/route-stop/*").hasAnyRole("MANAGER", "DRIVER","AUTOSERVICE")
 
                         // Validation (Le DRIVER peut valider/corriger si autorisé par le métier)
                         .requestMatchers(HttpMethod.PUT, "/api/collections/*/validate").hasAnyRole("MANAGER", "DRIVER")
 
                         // Statistiques (Le FARMER peut voir ses propres stats)
-                        .requestMatchers("/api/collections/stats/**").hasAnyRole("MANAGER", "FARMER")
+                        .requestMatchers("/api/collections/stats/**").hasAnyRole("MANAGER", "FARMER","AUTOSERVICE")
 
                         // Total mensuel ACCEPTED utilisé pour la facturation
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/collections/farmer/*/monthly-total"
                         )
-                        .hasRole("MANAGER")
+                        .hasAnyRole("MANAGER","AUTOSERVICE")
 
 
                         // Consultation globale (Réservée au MANAGER)
-                        .requestMatchers(HttpMethod.GET, "/api/collections/**").hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.GET, "/api/collections/**").hasAnyRole("MANAGER","AUTOSERVICE")
 
 
                         // Toute autre API nécessite une authentification
@@ -92,7 +91,11 @@ public class SecurityConfig {
                             response.getWriter().write("{\"status\": 403, \"error\": \"FORBIDDEN\", \"message\": \"Vous n'avez pas les autorisations nécessaires\"}");
                         })
                 )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(
+                                new KeycloakJwtAuthenticationConverter( )
+                        ))
+                );
 
         return http.build( );
     }

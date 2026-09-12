@@ -66,6 +66,8 @@ public class CollectionServiceResilientClient {
         List<FarmerClientResponse> response =
                 collectionServiceClient.getAllFarmers();
 
+        System.out.println("getAllFarmers========="+response);
+
         return response == null ? List.of() : response;
     }
 

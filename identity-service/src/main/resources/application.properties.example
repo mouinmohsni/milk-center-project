@@ -24,8 +24,8 @@ spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_i
 
 # En local : root/root
 # Dans Docker Compose : milkcenter/milkcenter_password
-spring.datasource.username=${SPRING_DATASOURCE_USERNAME:********}
-spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:********}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:******}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:******************}
 
 # =====================================================
 # Hibernate / JPA
@@ -41,7 +41,7 @@ spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.diale
 
 # En production, il est préférable de fournir JWT_SECRET
 # dans Docker Compose plutôt que de conserver le secret en clair.
-jwt.secret=${JWT_SECRET:******************************}
+jwt.secret=${JWT_SECRET:**********************************************}
 
 # =====================================================
 # Eureka Discovery Server
@@ -58,3 +58,27 @@ eureka.client.fetch-registry=${EUREKA_CLIENT_FETCH_REGISTRY:true}
 # Ne forcez pas 127.0.0.1 dans le conteneur.
 eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
 eureka.instance.prefer-ip-address=${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
+
+# =====================================================
+# OAuth2 Resource Server - validation des tokens reçus
+# =====================================================
+
+spring.security.oauth2.resourceserver.jwt.issuer-uri=${OAUTH2_ISSUER_URI:http://localhost:8080/realms/milkcenter}
+
+# =====================================================
+# OAuth2 Client - appels sortants de identity-service
+# =====================================================
+spring.security.oauth2.client.registration.service-client.provider=keycloak
+spring.security.oauth2.client.registration.service-client.client-id=${OAUTH2_CLIENT_ID:milkcenter-identity-service}
+spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:**********************}
+spring.security.oauth2.client.registration.service-client.authorization-grant-type=client_credentials
+spring.security.oauth2.client.registration.service-client.scope=milkcenter.read
+
+spring.security.oauth2.client.provider.keycloak.token-uri=${OAUTH2_TOKEN_URI:http://localhost:8080/realms/milkcenter/protocol/openid-connect/token}
+
+
+# =====================================================
+# OAuth2 pour OpenFeign
+# =====================================================
+spring.cloud.openfeign.oauth2.enabled=true
+spring.cloud.openfeign.oauth2.client-registration-id=service-client

@@ -2,6 +2,16 @@ spring:
   application:
     name: api-gateway
 
+  # =====================================================
+  # OAuth2 Resource Server
+  # Le Gateway valide les tokens reçus par les clients
+  # =====================================================
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8080/realms/milkcenter}
+
   cloud:
     gateway:
       routes:
@@ -20,8 +30,6 @@ spring:
           uri: lb://collection-service
           predicates:
             - Path=/api/farmers/**,/api/collections/**
-          filters:
-            - AuthenticationFilter
 
         # ================================
         # Fleet Service
@@ -30,8 +38,6 @@ spring:
           uri: lb://fleet-service
           predicates:
             - Path=/api/drivers/**,/api/vehicles/**,/api/routes/**,/api/route-stops/**,/api/route-executions/**
-          filters:
-            - AuthenticationFilter
 
         # ================================
         # Invoicing Service
@@ -40,8 +46,6 @@ spring:
           uri: lb://invoicing-service
           predicates:
             - Path=/api/invoices/**,/api/payments/**,/api/pricing-configurations/**
-          filters:
-            - AuthenticationFilter
 
 # ========================================
 # Eureka Client
@@ -52,6 +56,7 @@ eureka:
       defaultZone: "${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}"
     register-with-eureka: "${EUREKA_CLIENT_REGISTER_WITH_EUREKA:true}"
     fetch-registry: "${EUREKA_CLIENT_FETCH_REGISTRY:true}"
+
   instance:
     hostname: "${EUREKA_INSTANCE_HOSTNAME:localhost}"
     prefer-ip-address: "${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}"
@@ -61,9 +66,3 @@ eureka:
 # ========================================
 server:
   port: ${SERVER_PORT:9000}
-
-# ========================================
-# JWT utilisé par AuthenticationFilter
-# ========================================
-jwt:
-  secret: "${JWT_SECRET:5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437}"

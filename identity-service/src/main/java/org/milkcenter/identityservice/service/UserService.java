@@ -1,33 +1,36 @@
 package org.milkcenter.identityservice.service;
 
+
+import lombok.RequiredArgsConstructor;
+import org.milkcenter.identityservice.client.KeycloakAdminClient;
+import org.milkcenter.identityservice.client.KeycloakCreateUserRequest;
+import org.milkcenter.identityservice.client.KeycloakCredentialRequest;
 import org.milkcenter.identityservice.dto.request.RoleUpdateRequest;
 import org.milkcenter.identityservice.dto.request.UserRegisterRequest;
 import org.milkcenter.identityservice.dto.request.UserUpdateRequest;
+import org.milkcenter.identityservice.dto.response.UserResponse;
 import org.milkcenter.identityservice.enums.Role;
 import org.milkcenter.identityservice.model.User;
 import org.milkcenter.identityservice.repository.UserRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import lombok.*;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.server.ResponseStatusException;
-import org.milkcenter.identityservice.dto.response.UserResponse;
 
-
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class UserService implements UserDetailsService {
 
-    private final UserRepository userRepository ;
-    private final PasswordEncoder passwordEncoder; // Injecté automatiquement via Spring Security
-
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final KeycloakAdminClient keycloakAdminClient;
 
     @Override
     public UserDetails loadUserByUsername(String username)
@@ -39,16 +42,87 @@ public class UserService implements UserDetailsService {
                 ));
     }
 
-
-
     public UserResponse registerUser(UserRegisterRequest request) {
+        validateRegistrationUniqueness(request);
 
+        User newUser = new User();
+        newUser.setUsername(request.getUsername());
+        newUser.setEmail(request.getEmail());
+        newUser.setFirstName(request.getFirstName());
+        newUser.setLastName(request.getLastName());
+        newUser.setPhoneNumber(request.getPhoneNumber());
+        newUser.setRole(Role.FARMER);
+        newUser.setEnabled(true);
+        newUser.setPassword(passwordEncoder.encode(request.getPassword()));
 
+        // Première sauvegarde afin d'obtenir l'identifiant local utilisé
+        // comme attribut userId dans Keycloak.
+        User savedUser = userRepository.save(newUser);
+
+        KeycloakCreateUserRequest keycloakRequest =
+                KeycloakCreateUserRequest.builder()
+                        .username(savedUser.getUsername())
+                        .email(savedUser.getEmail())
+                        .firstName(savedUser.getFirstName())
+                        .lastName(savedUser.getLastName())
+                        .enabled(savedUser.isEnabled())
+                        // Les utilisateurs de l'application n'utilisent pas
+                        // de procédure de vérification d'e-mail.
+                        .emailVerified(true)
+                        .attributes(Map.of(
+                                "userId",
+                                List.of(String.valueOf(savedUser.getId()))
+                        ))
+                        .credentials(List.of(
+                                KeycloakCredentialRequest.builder()
+                                        .type("password")
+                                        .value(request.getPassword())
+                                        .temporary(false)
+                                        .build()
+                        ))
+                        .build();
+
+        try {
+            String keycloakUserId =
+                    keycloakAdminClient.createUser(keycloakRequest);
+
+            keycloakAdminClient.assignRealmRole(
+                    keycloakUserId,
+                    Role.FARMER.name()
+            );
+
+            // Correction essentielle : cette sauvegarde persistait auparavant
+            // uniquement en mémoire. Sans elle, keycloak_user_id restait NULL.
+            savedUser.setKeycloakUserId(keycloakUserId);
+            userRepository.save(savedUser);
+
+        } catch (RuntimeException exception) {
+            // Compensation locale si la création ou la configuration Keycloak
+            // échoue après la création de l'utilisateur local.
+            userRepository.delete(savedUser);
+
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Impossible de synchroniser l'utilisateur avec Keycloak",
+                    exception
+            );
+        }
+
+        return mapToResponse(savedUser);
+    }
+
+    private void validateRegistrationUniqueness(UserRegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Le username " + request.getUsername()
-                            + " est déjà utilisé"
+                    "Le username " + request.getUsername() + " est déjà utilisé"
+            );
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "L'adresse email " + request.getEmail() + " est déjà utilisée"
             );
         }
 
@@ -57,28 +131,10 @@ public class UserService implements UserDetailsService {
                 && userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Le numéro de téléphone "
-                            + request.getPhoneNumber()
+                    "Le numéro de téléphone " + request.getPhoneNumber()
                             + " est déjà utilisé"
             );
         }
-        User newUser = new User();
-
-        newUser.setUsername(request.getUsername());
-        newUser.setFirstName(request.getFirstName());
-        newUser.setLastName(request.getLastName());
-        newUser.setPhoneNumber(request.getPhoneNumber());
-
-        // Le rôle de l'inscription publique est défini côté serveur.
-        newUser.setRole(Role.FARMER);
-
-        // Le mot de passe doit être encodé avant la sauvegarde.
-        newUser.setPassword(
-                passwordEncoder.encode(request.getPassword())
-        );
-
-        User savedUser = userRepository.save(newUser);
-        return mapToResponse(savedUser);
     }
 
     public List<UserResponse> getAllUsers() {
@@ -88,44 +144,53 @@ public class UserService implements UserDetailsService {
                 .toList();
     }
 
-
     public Optional<UserResponse> getUserById(Long id) {
         return userRepository.findById(id)
                 .map(this::mapToResponse);
     }
 
-
     public Optional<User> getUserByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
-
-
     public UserResponse updateUser(Long id, UserUpdateRequest userDetails) {
-        User existingUser =findUserById(id);
+        User existingUser = findUserById(id);
 
-                    if (userDetails.getFirstName() != null) {
-                        existingUser.setFirstName(userDetails.getFirstName());
-                    }
-                    if (userDetails.getLastName() != null) {
-                        existingUser.setLastName(userDetails.getLastName());
-                    }
-                    if (userDetails.getPhoneNumber() != null) {
-                        existingUser.setPhoneNumber(userDetails.getPhoneNumber());
-                    }
+        if (userDetails.getEmail() != null
+                && !userDetails.getEmail().isBlank()
+                && !userDetails.getEmail().equals(existingUser.getEmail())
+                && userRepository.existsByEmail(userDetails.getEmail())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "L'adresse email est déjà utilisée"
+            );
+        }
 
+        if (userDetails.getEmail() != null
+                && !userDetails.getEmail().isBlank()) {
+            existingUser.setEmail(userDetails.getEmail());
+        }
+        if (userDetails.getFirstName() != null) {
+            existingUser.setFirstName(userDetails.getFirstName());
+        }
+        if (userDetails.getLastName() != null) {
+            existingUser.setLastName(userDetails.getLastName());
+        }
+        if (userDetails.getPhoneNumber() != null) {
+            existingUser.setPhoneNumber(userDetails.getPhoneNumber());
+        }
+        if (userDetails.getPassword() != null
+                && !userDetails.getPassword().isBlank()) {
+            existingUser.setPassword(
+                    passwordEncoder.encode(userDetails.getPassword())
+            );
+        }
 
-                    // Le mot de passe n'est mis à jour que s'il est fourni
-                    if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
-                        existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
-                    }
-
-                    User update = userRepository.save(existingUser);
-        return mapToResponse(update);
+        return mapToResponse(userRepository.save(existingUser));
     }
 
     public UserResponse updateUserRole(Long id, RoleUpdateRequest userDetails) {
-        User existingUser =findUserById(id);
+        User existingUser = findUserById(id);
 
         if (userDetails.getRole() == null) {
             throw new ResponseStatusException(
@@ -135,65 +200,45 @@ public class UserService implements UserDetailsService {
         }
 
         existingUser.setRole(userDetails.getRole());
-        User update = userRepository.save(existingUser);
-        return mapToResponse(update);
+        return mapToResponse(userRepository.save(existingUser));
     }
 
-
-
-
-
-    // --- DELETE (Suppression) ---
     public void hardDeleteUser(Long id) {
-        User user = findUserById(id);
-
-        userRepository.delete(user);
+        userRepository.delete(findUserById(id));
     }
 
     public void softDeleteUser(Long id) {
         User user = findUserById(id);
-
         user.setEnabled(false);
-
         userRepository.save(user);
     }
 
-    // --- LOGIN LOGIC (Vérification des identifiants) ---
     public boolean verifyLogin(String username, String rawPassword) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
+        Optional<User> userOptional = userRepository.findByUsername(username);
 
-        if (userOpt.isEmpty()) {
+        if (userOptional.isEmpty()) {
             return false;
         }
 
-        User user = userOpt.get();
+        User user = userOptional.get();
 
-        // Un compte désactivé ne peut pas se connecter.
-        if (!user.isEnabled()) {
-            return false;
-        }
-
-        // Comparaison du mot de passe saisi avec le mot de passe haché.
-        return passwordEncoder.matches(
-                rawPassword,
-                user.getPassword()
-        );
+        return user.isEnabled()
+                && passwordEncoder.matches(rawPassword, user.getPassword());
     }
 
-
-
-    private User findUserById(Long id ){
-        return userRepository.findById(id).orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                "Aucun user trouvé avec l'ID : " + id
-
-        ));
+    private User findUserById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Aucun utilisateur trouvé avec l'ID : " + id
+                ));
     }
 
     private UserResponse mapToResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
+                .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .phoneNumber(user.getPhoneNumber())
@@ -203,9 +248,4 @@ public class UserService implements UserDetailsService {
                 .updatedAt(user.getUpdatedAt())
                 .build();
     }
-
-
-
-
-
 }

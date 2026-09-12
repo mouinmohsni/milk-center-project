@@ -1,27 +1,29 @@
-package org.milkcenter.identityservice.dto.response;
+package org.milkcenter.identityservice.client;
+
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.milkcenter.identityservice.enums.Role;
 
-import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class UserResponse {
+public class KeycloakCreateUserRequest {
 
-    private Long id;
     private String username;
     private String email;
     private String firstName;
     private String lastName;
-    private String phoneNumber;
-    private Role role;
     private boolean enabled;
-    private Date createdAt;
-    private Date updatedAt;
+    private boolean emailVerified;
+    private Map<String, List<String>> attributes;
+    private List<KeycloakCredentialRequest> credentials;
+
+
 }

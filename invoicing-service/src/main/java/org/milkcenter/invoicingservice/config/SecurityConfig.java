@@ -1,8 +1,6 @@
 package org.milkcenter.invoicingservice.config;
 
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import org.milkcenter.invoicingservice.filter.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,14 +8,10 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
-
-    private final JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -26,18 +20,14 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable( ))
-                .formLogin(formLogin -> formLogin.disable())
-                .httpBasic(httpBasic -> httpBasic.disable( ))
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
                 )
 
                 .authorizeHttpRequests(auth -> auth
-
-                        /*
-                         * Il n'y a pas de /api/auth/** dans invoicing-service.
-                         * Le login est géré par identity-service.
-                         */
 
                         // Consultation de ses propres factures.
                         .requestMatchers(
@@ -46,13 +36,12 @@ public class SecurityConfig {
                         ).hasAnyRole("FARMER", "MANAGER")
 
                         // Consultation d'une facture précise.
-                        // Le service vérifie ensuite la propriété du fermier.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/invoices/*"
                         ).hasAnyRole("FARMER", "MANAGER")
 
-                        // Liste globale et recherche par fermier : MANAGER uniquement.
+                        // Liste globale et recherche par fermier.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/invoices",
@@ -60,107 +49,113 @@ public class SecurityConfig {
                                 "/api/invoices/farmer/*"
                         ).hasRole("MANAGER")
 
-                        // Création, modification, changement de statut et suppression.
+                        // Création d'une facture.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/invoices"
                         ).hasRole("MANAGER")
 
+                        // Modification et changement de statut.
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/invoices/*",
                                 "/api/invoices/*/status"
                         ).hasRole("MANAGER")
 
+                        // Suppression d'une facture.
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/invoices/*"
                         ).hasRole("MANAGER")
 
-                        // Consultation de ses paiements ou des paiements d'une facture accessible.
+                        // Consultation des paiements.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/payments/*",
                                 "/api/payments/invoice/*"
                         ).hasAnyRole("FARMER", "MANAGER")
 
-                        // Création et modification des paiements : MANAGER uniquement.
+                        // Création d'un paiement.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/payments/invoice/*"
                         ).hasRole("MANAGER")
 
+                        // Modification d'un paiement.
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/payments/*",
                                 "/api/payments/*/status"
                         ).hasRole("MANAGER")
 
+                        // Suppression d'un paiement.
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/payments/*"
                         ).hasRole("MANAGER")
 
-
-                        // Gestion des configurations tarifaires réservée au MANAGER
+                        // Création d'une configuration tarifaire.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/pricing-configurations"
-                        )
-                        .hasRole("MANAGER")
+                        ).hasRole("MANAGER")
 
+                        // Consultation des configurations tarifaires.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/pricing-configurations",
                                 "/api/pricing-configurations/*",
                                 "/api/pricing-configurations/type/*"
-                        )
-                        .hasRole("MANAGER")
+                        ).hasRole("MANAGER")
 
+                        // Modification d'une configuration tarifaire.
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/pricing-configurations/*"
-                        )
-                        .hasRole("MANAGER")
+                        ).hasRole("MANAGER")
 
+                        // Suppression d'une configuration tarifaire.
                         .requestMatchers(
                                 HttpMethod.DELETE,
                                 "/api/pricing-configurations/*",
                                 "/api/pricing-configurations/*/hard"
-                        )
-                        .hasRole("MANAGER")
+                        ).hasRole("MANAGER")
 
-
-                        // Toute autre route nécessite un JWT valide.
+                        // Toutes les autres routes nécessitent un token Keycloak valide.
                         .anyRequest().authenticated()
                 )
 
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint((request, response, exceptionAuth) -> {
+                        .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
-                            response.getWriter().write(
-                                    "{\"status\":401,"
-                                            + "\"error\":\"UNAUTHORIZED\","
-                                            + "\"message\":\"Authentification requise\"}"
-                            );
+                            response.getWriter().write("""
+                                    {
+                                      "status": 401,
+                                      "error": "UNAUTHORIZED",
+                                      "message": "Authentification requise"
+                                    }
+                                    """);
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
-                            response.getWriter().write(
-                                    "{\"status\":403,"
-                                            + "\"error\":\"FORBIDDEN\","
-                                            + "\"message\":\"Vous n'avez pas les autorisations nécessaires\"}"
-                            );
+                            response.getWriter().write("""
+                                    {
+                                      "status": 403,
+                                      "error": "FORBIDDEN",
+                                      "message": "Vous n'avez pas les autorisations nécessaires"
+                                    }
+                                    """);
                         })
                 )
 
-                .addFilterBefore(
-                        jwtAuthFilter,
-                        UsernamePasswordAuthenticationFilter.class
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(
+                                new KeycloakJwtAuthenticationConverter()
+                        ))
                 );
 
         return http.build( );
