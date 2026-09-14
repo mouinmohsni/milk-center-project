@@ -24,8 +24,8 @@ spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_i
 
 # En local : root/root
 # Dans Docker Compose : milkcenter/milkcenter_password
-spring.datasource.username=${SPRING_DATASOURCE_USERNAME:******}
-spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:******************}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:*****}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:*****}
 
 # =====================================================
 # Hibernate / JPA
@@ -41,7 +41,7 @@ spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.diale
 
 # En production, il est préférable de fournir JWT_SECRET
 # dans Docker Compose plutôt que de conserver le secret en clair.
-jwt.secret=${JWT_SECRET:**********************************************}
+jwt.secret=${JWT_SECRET:5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437}
 
 # =====================================================
 # Eureka Discovery Server
@@ -70,7 +70,7 @@ spring.security.oauth2.resourceserver.jwt.issuer-uri=${OAUTH2_ISSUER_URI:http://
 # =====================================================
 spring.security.oauth2.client.registration.service-client.provider=keycloak
 spring.security.oauth2.client.registration.service-client.client-id=${OAUTH2_CLIENT_ID:milkcenter-identity-service}
-spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:**********************}
+spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:MqCjN3OrsE9HZRenFbJBnnc3kwQi7SIU}
 spring.security.oauth2.client.registration.service-client.authorization-grant-type=client_credentials
 spring.security.oauth2.client.registration.service-client.scope=milkcenter.read
 
@@ -82,3 +82,28 @@ spring.security.oauth2.client.provider.keycloak.token-uri=${OAUTH2_TOKEN_URI:htt
 # =====================================================
 spring.cloud.openfeign.oauth2.enabled=true
 spring.cloud.openfeign.oauth2.client-registration-id=service-client
+
+# =====================================================
+# Client OAuth2 pour l'administration Keycloak
+# =====================================================
+spring.security.oauth2.client.registration.keycloak-admin.provider=keycloak
+spring.security.oauth2.client.registration.keycloak-admin.client-id=${OAUTH2_CLIENT_ID:milkcenter-identity-service}
+spring.security.oauth2.client.registration.keycloak-admin.client-secret=${OAUTH2_CLIENT_SECRET:**********************}
+spring.security.oauth2.client.registration.keycloak-admin.authorization-grant-type=client_credentials
+spring.security.oauth2.client.registration.keycloak-admin.scope=openid
+
+
+# URL de base de l'API d'administration Keycloak
+keycloak.admin.base-url=${KEYCLOAK_ADMIN_BASE_URL:http://localhost:8080/admin/realms/milkcenter}
+
+# Client utilisateur Keycloak
+keycloak.oidc.client-id=milkcenter-user-client
+keycloak.oidc.client-secret=${KEYCLOAK_USER_CLIENT_SECRET:}
+
+# Endpoint de génération des tokens
+keycloak.oidc.token-uri=http://localhost:8080/realms/milkcenter/protocol/openid-connect/token
+
+# Endpoint de révocation du refresh token
+keycloak.oidc.logout-uri=http://localhost:8080/realms/milkcenter/protocol/openid-connect/logout
+
+

@@ -2,6 +2,8 @@ package org.milkcenter.invoicingservice.service;
 
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.milkcenter.invoicingservice.dto.request.InvoiceCreateRequest;
 import org.milkcenter.invoicingservice.dto.request.InvoiceLineRequest;
 import org.milkcenter.invoicingservice.dto.request.InvoiceStatusUpdateRequest;
@@ -13,7 +15,10 @@ import org.milkcenter.invoicingservice.dto.response.client.MilkCollectionClientR
 import org.milkcenter.invoicingservice.enums.InvoiceStatus;
 import org.milkcenter.invoicingservice.enums.InvoiceType;
 import org.milkcenter.invoicingservice.enums.SaleUnit;
+import org.milkcenter.invoicingservice.event.InvoiceNotificationEventProducer;
+import org.milkcenter.invoicingservice.event.MilkCollectionStatusChangedEvent;
 import org.milkcenter.invoicingservice.model.Invoice;
+
 import org.milkcenter.invoicingservice.model.InvoiceLine;
 import org.milkcenter.invoicingservice.model.PricingConfiguration;
 import org.milkcenter.invoicingservice.repository.InvoiceRepository;
@@ -22,6 +27,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.milkcenter.invoicingservice.repository.InvoiceLineRepository;
+
+import java.util.Date;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,11 +44,22 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InvoiceService {
 
     private static final int MONEY_SCALE = 2;
     private static final int PRICE_SCALE = 3;
     private static final RoundingMode ROUNDING_MODE = RoundingMode.HALF_UP;
+
+
+    private final InvoiceLineRepository invoiceLineRepository;
+    private final InvoiceNotificationEventProducer notificationEventProducer;
+
+
+
+
+
+
 
     /** Nom standard de la configuration du lait. */
     private static final String MILK_PRODUCT_NAME = "Lait cru";
@@ -156,8 +175,139 @@ public class InvoiceService {
         return mapToResponse(invoiceRepository.save(invoice));
     }
 
+    /**
+     * Traite une collecte ACCEPTED reçue depuis collection-service.
+     * La méthode est idempotente : une collection ne peut produire
+     * qu'une seule ligne dans la facture de sa période.
+     */
+
+    @Transactional
+    public void processAcceptedCollection(MilkCollectionStatusChangedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("L'événement de collecte est obligatoire");
+        }
+
+        if (!"ACCEPTED".equalsIgnoreCase(event.getStatus())) {
+            log.info("Événement ignoré par invoicing-service : status={}", event.getStatus());
+            return;
+        }
+
+        if (event.getCollectionId() == null
+                || event.getFarmerId() == null
+                || event.getQuantityLiters() == null
+                || event.getQuantityLiters().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "collectionId, farmerId et quantityLiters sont obligatoires et valides"
+            );
+        }
+
+        LocalDate billingDate = resolveBillingDate(event);
+
+        int month = billingDate.getMonthValue();
+        int year = billingDate.getYear();
+
+        Invoice invoice = invoiceRepository
+                .findByFarmerIdAndInvoiceTypeAndBillingMonthAndBillingYear(
+                        event.getFarmerId(),
+                        InvoiceType.MILK_PURCHASE,
+                        month,
+                        year
+                )
+                .orElseGet(() -> createAutomaticDraftInvoice(
+                        event.getFarmerId(), month, year
+                ));
+
+        if (invoiceLineRepository.existsByInvoice_IdAndMilkCollectionId(
+                invoice.getId(), event.getCollectionId())) {
+            logDuplicateCollection(event, invoice);
+            return;
+        }
+
+        PricingConfiguration configuration =
+                pricingConfigurationService.findApplicableConfiguration(
+                        InvoiceType.MILK_PURCHASE,
+                        MILK_PRODUCT_NAME,
+                        SaleUnit.LITRE,
+                        null,
+                        billingDate
+                );
+
+        InvoiceLine line = buildLineFromConfiguration(
+                invoice,
+                event.getCollectionId(),
+                "Lait cru - collecte " + event.getCollectionId(),
+                event.getQuantityLiters(),
+                configuration
+        );
+
+        invoice.addLine(line);
+
+        // Persister explicitement la ligne avant le flush de la collection Invoice.lines.
+        InvoiceLine savedLine = invoiceLineRepository.saveAndFlush(line);
+
+        recalculateTotals(invoice);
+        updateInvoiceTaxRateFromLines(invoice);
+
+        Invoice savedInvoice = invoiceRepository.saveAndFlush(invoice);
+
+        notificationEventProducer.publishInvoiceLineAdded(
+                savedInvoice,
+                event.getCollectionId(),
+                event.getQuantityLiters(),
+                savedLine.getTotalAmount()
+        );
+    }
+
+    private Invoice createAutomaticDraftInvoice(Long farmerId,
+                                                int billingMonth,
+                                                int billingYear) {
+        Invoice invoice = Invoice.builder()
+                .invoiceNumber(generateInvoiceNumber())
+                .farmerId(farmerId)
+                .invoiceType(InvoiceType.MILK_PURCHASE)
+                .status(InvoiceStatus.DRAFT)
+                .billingMonth(billingMonth)
+                .billingYear(billingYear)
+                .taxRate(BigDecimal.ZERO.setScale(2, ROUNDING_MODE))
+                .subtotal(BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING_MODE))
+                .taxAmount(BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING_MODE))
+                .totalAmount(BigDecimal.ZERO.setScale(MONEY_SCALE, ROUNDING_MODE))
+                .build();
+
+        Invoice savedInvoice = invoiceRepository.saveAndFlush(invoice);
+        notificationEventProducer.publishInvoiceCreated(savedInvoice, "AUTOMATIC");
+
+        return savedInvoice;
+    }
+
+    private LocalDate resolveBillingDate(MilkCollectionStatusChangedEvent event) {
+        Date collectedAt = event.getCollectedAt();
+        if (collectedAt != null) {
+            return collectedAt.toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate();
+        }
+
+        if (event.getValidatedAt() != null) {
+            return event.getValidatedAt().toLocalDate();
+        }
+
+        return LocalDate.now();
+    }
+
+    private void logDuplicateCollection(MilkCollectionStatusChangedEvent event,
+                                        Invoice invoice) {
+        log.info(
+                "Collection déjà facturée, événement ignoré de manière idempotente : "
+                        + "collectionId={}, invoiceId={}",
+                event.getCollectionId(),
+                invoice.getId()
+        );
+    }
+
     @Transactional(readOnly = true)
     public InvoiceResponse getInvoiceById(Long id) {
+
         Invoice invoice = findInvoiceById(id);
         requireReadAccess(invoice);
         return mapToResponse(invoice);
@@ -276,9 +426,67 @@ public class InvoiceService {
             invoice.setNotes(request.getReason());
         }
 
+        InvoiceStatus previousStatus = invoice.getStatus();
+
         invoice.setStatus(newStatus);
-        return mapToResponse(invoiceRepository.save(invoice));
+
+        Invoice invoiceUpdate = invoiceRepository.saveAndFlush(invoice);
+
+        if (previousStatus == InvoiceStatus.DRAFT
+                && newStatus == InvoiceStatus.ISSUED){
+
+            notificationEventProducer.publishInvoiceProcessed(
+                    invoiceUpdate,
+                    previousStatus
+            );
+
+            log.info(
+                    "Facture traitée : invoiceId={}, farmerUserId={}, totalAmount={}",
+                    invoiceUpdate.getId(),
+                    invoiceUpdate.getFarmerUserId(),
+                    invoiceUpdate.getTotalAmount()
+            );
+
+        }
+
+        return mapToResponse(invoiceUpdate);
     }
+
+    @Transactional
+    public InvoiceResponse cancelInvoice(Long id) {
+        requireManager();
+
+        Invoice invoice = findInvoiceById(id);
+
+        if (invoice.getStatus() != InvoiceStatus.DRAFT
+                && invoice.getStatus() != InvoiceStatus.ISSUED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Seule une facture DRAFT ou ISSUED peut être annulée"
+            );
+        }
+
+        InvoiceStatus previousStatus = invoice.getStatus();
+
+        invoice.setStatus(InvoiceStatus.CANCELLED);
+
+        Invoice updatedInvoice = invoiceRepository.saveAndFlush(invoice);
+
+        notificationEventProducer.publishInvoiceCancelled(
+                updatedInvoice,
+                previousStatus
+        );
+
+        log.info(
+                "Facture annulée : invoiceId={}, farmerUserId={}, ancienStatut={}, montant={}",
+                updatedInvoice.getId(),
+                updatedInvoice.getFarmerUserId(),
+                previousStatus,
+                updatedInvoice.getTotalAmount()
+        );
+        return mapToResponse(updatedInvoice);
+    }
+
 
     @Transactional
     public void deleteInvoice(Long id) {
@@ -296,6 +504,7 @@ public class InvoiceService {
 
         invoiceRepository.delete(invoice);
     }
+
 
     private void addMilkLine(
             Invoice invoice,

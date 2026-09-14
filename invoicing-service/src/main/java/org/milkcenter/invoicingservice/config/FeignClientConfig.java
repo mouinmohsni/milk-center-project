@@ -1,9 +1,14 @@
 package org.milkcenter.invoicingservice.config;
 
-
 import feign.RequestInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
@@ -11,17 +16,18 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
-@Configuration(proxyBeanMethods = false)
+@Configuration(proxyBeanMethods = false )
 public class FeignClientConfig {
 
     private static final String CLIENT_REGISTRATION_ID = "service-client";
     private static final String TECHNICAL_PRINCIPAL = "invoicing-service";
 
     /**
-     * OAuth2 manager capable of obtaining a client_credentials token even when
-     * the call is made by a scheduler and no HTTP request is available.
+     * Gestionnaire utilisé uniquement pour obtenir un token technique
+     * avec le grant client_credentials.
      */
     @Bean
     public OAuth2AuthorizedClientManager oauth2AuthorizedClientManager(
@@ -44,14 +50,54 @@ public class FeignClientConfig {
     }
 
     /**
-     * Adds a Keycloak access token to every request sent by this Feign client.
-     * The token is obtained from the registration named service-client.
+     * Intercepteur hybride :
+     *
+     * - appel manuel avec un MANAGER : propagation du token entrant ;
+     * - appel automatique sans requête HTTP : token technique AUTOSERVICE.
      */
     @Bean
-    public RequestInterceptor oauth2RequestInterceptor(
+    public RequestInterceptor authenticationRequestInterceptor(
             OAuth2AuthorizedClientManager authorizedClientManager
     ) {
         return requestTemplate -> {
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+
+            /* Appel manuel provenant d'une requête HTTP. */
+            if (attributes != null) {
+                HttpServletRequest currentRequest = attributes.getRequest();
+                String incomingAuthorization =
+                        currentRequest.getHeader(HttpHeaders.AUTHORIZATION);
+
+                Authentication authentication =
+                        SecurityContextHolder.getContext().getAuthentication();
+
+                boolean isManager = authentication != null
+                        && authentication.getAuthorities().stream()
+                        .anyMatch(authority ->
+                                "ROLE_MANAGER".equals(authority.getAuthority()));
+
+                if (!isManager) {
+                    throw new AccessDeniedException(
+                            "Un appel manuel Feign nécessite le rôle MANAGER"
+                    );
+                }
+
+                if (incomingAuthorization == null
+                        || !incomingAuthorization.startsWith("Bearer ")) {
+                    throw new AccessDeniedException(
+                            "Le token utilisateur est absent de la requête"
+                    );
+                }
+
+                requestTemplate.header(
+                        HttpHeaders.AUTHORIZATION,
+                        incomingAuthorization
+                );
+                return;
+            }
+
+            /* Appel automatique provenant du scheduler ou d'un traitement en arrière-plan. */
             OAuth2AuthorizeRequest authorizeRequest =
                     OAuth2AuthorizeRequest
                             .withClientRegistrationId(CLIENT_REGISTRATION_ID)
@@ -71,7 +117,7 @@ public class FeignClientConfig {
             }
 
             requestTemplate.header(
-                    "Authorization",
+                    HttpHeaders.AUTHORIZATION,
                     "Bearer " + authorizedClient.getAccessToken().getTokenValue()
             );
         };

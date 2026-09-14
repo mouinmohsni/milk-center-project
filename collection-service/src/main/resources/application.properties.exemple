@@ -13,12 +13,6 @@ spring.application.name=collection-service
 # Dans Docker Compose : SERVER_PORT=8082
 server.port=${SERVER_PORT:8082}
 
-# =====================================================
-# JWT
-# =====================================================
-
-# Le secret doit être identique à celui d'identity-service.
-jwt.secret=${JWT_SECRET:*****************************************************}
 
 # =====================================================
 # Base de données MySQL
@@ -75,3 +69,46 @@ resilience4j.circuitbreaker.instances.fleetService.automatic-transition-from-ope
 spring.cloud.openfeign.client.config.fleet-service.connect-timeout=2000
 spring.cloud.openfeign.client.config.fleet-service.read-timeout=3000
 
+
+# =====================================================
+# OAuth2 Resource Server - validation des tokens reçus
+# =====================================================
+spring.security.oauth2.resourceserver.jwt.issuer-uri=${OAUTH2_ISSUER_URI:http://localhost:8080/realms/milkcenter}
+
+# =====================================================
+# OAuth2 Client - appels sortants de collection-service
+# =====================================================
+
+spring.security.oauth2.client.registration.service-client.provider=keycloak
+spring.security.oauth2.client.registration.service-client.client-id=${OAUTH2_CLIENT_ID:milkcenter-collection-service}
+spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:***************}
+spring.security.oauth2.client.registration.service-client.authorization-grant-type=client_credentials
+spring.security.oauth2.client.registration.service-client.scope=milkcenter.read
+
+spring.security.oauth2.client.provider.keycloak.token-uri=${OAUTH2_TOKEN_URI:http://localhost:8080/realms/milkcenter/protocol/openid-connect/token}
+
+# =====================================================
+# OAuth2 pour OpenFeign
+# =====================================================
+
+spring.cloud.openfeign.oauth2.enabled=false
+spring.cloud.openfeign.oauth2.client-registration-id=service-client
+
+
+# =====================================================
+# Kafka Producer
+# =====================================================
+spring.kafka.bootstrap-servers=${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer
+
+# Évite l’ajout de métadonnées de type Java dans le JSON Kafka
+spring.kafka.producer.properties[spring.json.add.type.headers]=false
+
+
+# =====================================================
+# debug
+# =====================================================
+logging.level.org.milkcenter.collectionservice.client=DEBUG
+logging.level.org.springframework.cloud.openfeign=DEBUG
+logging.level.feign=DEBUG

@@ -1,41 +1,20 @@
+
 # =====================================================
 # Fleet Service
 # =====================================================
-
-# Nom de l'application
 spring.application.name=fleet-service
-
-# =====================================================
-# Serveur HTTP
-# =====================================================
-
-# En local : 8083
-# Dans Docker Compose : SERVER_PORT=8083
 server.port=${SERVER_PORT:8083}
-
-# =====================================================
-# JWT
-# =====================================================
-
-# Le secret doit être identique à celui utilisé par identity-service
-# et par les services qui valident les JWT.
-jwt.secret=${JWT_SECRET:**********}
 
 # =====================================================
 # Base de données MySQL
 # =====================================================
-
-# En local : localhost et milk_fleet_db.
-# Dans Docker Compose, l'URL sera remplacée par celle utilisant
-# le nom du service Docker : fleet-db.
 spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_fleet_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-spring.datasource.username=${SPRING_DATASOURCE_USERNAME:*****}
-spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:*****}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:********}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:********}
 
 # =====================================================
 # JPA / Hibernate
 # =====================================================
-
 spring.jpa.hibernate.ddl-auto=${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
 spring.jpa.show-sql=${SPRING_JPA_SHOW_SQL:true}
 spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.dialect.MySQLDialect}
@@ -43,18 +22,40 @@ spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.diale
 # =====================================================
 # Eureka Discovery Server
 # =====================================================
-
-# En local : http://localhost:8761/eureka/
-# Dans Docker Compose : http://discovery-server:8761/eureka/
 eureka.client.service-url.defaultZone=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
 eureka.client.register-with-eureka=${EUREKA_CLIENT_REGISTER_WITH_EUREKA:true}
 eureka.client.fetch-registry=${EUREKA_CLIENT_FETCH_REGISTRY:true}
-
 eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
-eureka.instance.prefer-ip-address=${EUREEKA_INSTANCE_PREFER_IP_ADDRESS:false}
+eureka.instance.prefer-ip-address=${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
 
 # =====================================================
 # Gestion des erreurs
 # =====================================================
-
 server.error.include-message=${SERVER_ERROR_INCLUDE_MESSAGE:always}
+
+# =====================================================
+# OAuth2 Resource Server : validation des tokens Keycloak reçus
+# =====================================================
+spring.security.oauth2.resourceserver.jwt.issuer-uri=${OAUTH2_ISSUER_URI:http://localhost:8080/realms/milkcenter}
+
+# =====================================================
+# OAuth2 Client : identité technique de fleet-service
+# =====================================================
+# Ces trois noms doivent correspondre au client créé dans Keycloak.
+spring.security.oauth2.client.registration.service-client.provider=keycloak
+spring.security.oauth2.client.registration.service-client.client-id=${OAUTH2_CLIENT_ID:milkcenter-fleet-service}
+spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:**************************}
+
+spring.security.oauth2.client.registration.service-client.authorization-grant-type=client_credentials
+
+spring.security.oauth2.client.provider.keycloak.token-uri=${OAUTH2_TOKEN_URI:http://localhost:8080/realms/milkcenter/protocol/openid-connect/token}
+
+# =====================================================
+# OAuth2 pour OpenFeign
+# =====================================================
+# Cette propriété sera utilisée dès qu'un FeignClient sortant sera ajouté.
+spring.cloud.openfeign.oauth2.enabled=${OPENFEIGN_OAUTH2_ENABLED:true}
+spring.cloud.openfeign.oauth2.client-registration-id=service-client
+
+
+

@@ -2,7 +2,7 @@ package org.milkcenter.collectionservice.service;
 
 import lombok.RequiredArgsConstructor;
 import org.milkcenter.collectionservice.dto.response.CollectionCreationResult;
-import org.milkcenter.collectionservice.service.RouteStopResilientClient;
+//import org.milkcenter.collectionservice.service.RouteStopResilientClient;
 import org.milkcenter.collectionservice.dto.request.CollectionValidationRequest;
 import org.milkcenter.collectionservice.dto.request.MilkCollectionRequest;
 import org.milkcenter.collectionservice.dto.response.MilkCollectionResponse;
@@ -14,6 +14,12 @@ import org.milkcenter.collectionservice.security.CurrentUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.milkcenter.collectionservice.event.MilkCollectionEventPublisher;
+import org.milkcenter.collectionservice.event.MilkCollectionStatusChangedEvent;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -26,6 +32,8 @@ public class MilkCollectionService {
     private final MilkCollectionRepository collectionRepository;
     private final CurrentUserService currentUserService;
     private final RouteStopResilientClient routeStopResilientClient ;
+    private final MilkCollectionEventPublisher collectionEventPublisher;
+
 
     private void checkCollectionOwnership(MilkCollection collection ) {
         String role = currentUserService.getCurrentRole();
@@ -150,12 +158,13 @@ public class MilkCollectionService {
                 .collect(Collectors.toList());
     }
 
+    /*
     public List<MilkCollectionResponse> getLatestCollectionsByFarmerId(Long farmerId) {
         return collectionRepository.findLatestByFarmerId(farmerId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
-
+*/
     public MilkCollectionResponse validateCollection(Long id, CollectionValidationRequest request) {
         MilkCollection collection = collectionRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Collecte non trouvée"));
@@ -184,7 +193,12 @@ public class MilkCollectionService {
             collection.setUpdatedByUserId(currentUserService.getCurrentUserId());
         }
 
-        return mapToResponse(collectionRepository.save(collection));
+        MilkCollection savedCollection = collectionRepository.save(collection);
+
+        publishStatusChangedEvent(savedCollection);
+
+        return mapToResponse(savedCollection);
+
     }
 
     public BigDecimal getTotalLitersByFarmerAndPeriod(Long farmerId, CollectionStatus status, Date start, Date end) {
@@ -313,6 +327,26 @@ public class MilkCollectionService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
+
+    private void publishStatusChangedEvent(MilkCollection collection) {
+        MilkCollectionStatusChangedEvent event =
+                MilkCollectionStatusChangedEvent.builder()
+                        .eventId(UUID.randomUUID())
+                        .collectionId(collection.getId())
+                        .farmerId(collection.getFarmerId())
+                        .driverUserId(collection.getDriverUserId())
+                        .routeStopId(collection.getRouteStopId())
+                        .status(collection.getStatus().name())
+                        .quantityLiters(collection.getQuantityLiters())
+                        .collectedAt(collection.getCollectedAt())
+                        .validatedAt(LocalDateTime.now())
+                        .validatorUserId(collection.getValidatorUserId())
+                        .validationNotes(collection.getValidationNotes())
+                        .build();
+
+        collectionEventPublisher.publishStatusChanged(event);
+    }
+
 
 
     private MilkCollectionResponse mapToResponse(MilkCollection collection) {

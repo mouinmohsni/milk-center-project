@@ -299,7 +299,9 @@ public class RouteStopService {
                 );
             }
 
+
             if (!hasActiveExecutionForDriver(routeId, currentUserId)) {
+
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN,
                         "Cet arrêt appartient à une route qui ne vous est pas affectée"

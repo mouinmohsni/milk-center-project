@@ -83,6 +83,18 @@ public class InvoiceController {
                 invoiceService.updateInvoiceStatus(id, request)
         );
     }
+    /** Changement contrôlé du cancel statut d'une facture. */
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<InvoiceResponse> updateInvoiceStatus(
+            @PathVariable Long id
+
+    ) {
+        return ResponseEntity.ok(
+                invoiceService.cancelInvoice(id)
+        );
+    }
+
+
 
     /** Suppression d'une facture DRAFT ou CANCELLED. */
     @DeleteMapping("/{id}")

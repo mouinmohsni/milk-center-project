@@ -47,6 +47,7 @@
         <module>api-gateway</module>
         <module>fleet-service</module>
         <module>invoicing-service</module>
+        <module>notification-service</module>
 
     </modules>
 

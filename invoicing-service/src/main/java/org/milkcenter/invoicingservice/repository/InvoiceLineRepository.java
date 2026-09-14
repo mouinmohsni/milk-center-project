@@ -13,4 +13,12 @@ public interface InvoiceLineRepository extends JpaRepository<InvoiceLine, Long> 
      * Retourne toutes les lignes appartenant à une facture.
      */
     List<InvoiceLine> findByInvoice_Id(Long invoiceId);
+
+    boolean existsByInvoice_IdAndMilkCollectionId(
+            Long invoiceId,
+            Long milkCollectionId
+    );
+
+
+
 }

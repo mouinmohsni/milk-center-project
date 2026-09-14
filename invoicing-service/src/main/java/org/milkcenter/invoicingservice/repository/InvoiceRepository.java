@@ -1,5 +1,6 @@
 package org.milkcenter.invoicingservice.repository;
 
+import org.milkcenter.invoicingservice.enums.InvoiceStatus;
 import org.milkcenter.invoicingservice.enums.InvoiceType;
 import org.milkcenter.invoicingservice.model.Invoice;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -45,4 +46,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Invoice> findByInvoiceTypeOrderByBillingYearDescBillingMonthDesc(
             InvoiceType invoiceType
     );
+
+    List<Invoice> findByStatusAndBillingMonthAndBillingYear(
+            InvoiceStatus status,
+            Integer billingMonth,
+            Integer billingYear
+    );
+
 }

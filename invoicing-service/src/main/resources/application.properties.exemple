@@ -1,41 +1,20 @@
+
 # =====================================================
 # Invoicing Service
 # =====================================================
-
-# Nom de l'application
 spring.application.name=invoicing-service
-
-# =====================================================
-# Serveur HTTP
-# =====================================================
-
-# En local : 8084
-# Dans Docker Compose : SERVER_PORT=8084
 server.port=${SERVER_PORT:8084}
-
-# =====================================================
-# JWT
-# =====================================================
-
-# Le même secret doit être utilisé par les services qui valident les JWT.
-# Dans Docker Compose, JWT_SECRET peut remplacer cette valeur par défaut.
-jwt.secret=${JWT_SECRET:***************************************************}
 
 # =====================================================
 # Base de données MySQL
 # =====================================================
-
-# En local : localhost et milk_Invoicing_db.
-# Dans Docker Compose, cette valeur sera remplacée par l'URL utilisant
-# le nom du conteneur/service : invoicing-db.
-spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_Invoicing_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-spring.datasource.username=${SPRING_DATASOURCE_USERNAME:****}
-spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:****}
+spring.datasource.url=${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/milk_invoicing_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+spring.datasource.username=${SPRING_DATASOURCE_USERNAME:*****}
+spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:*****}
 
 # =====================================================
 # JPA / Hibernate
 # =====================================================
-
 spring.jpa.hibernate.ddl-auto=${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
 spring.jpa.show-sql=${SPRING_JPA_SHOW_SQL:true}
 spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.dialect.MySQLDialect}
@@ -43,26 +22,20 @@ spring.jpa.properties.hibernate.dialect=${SPRING_JPA_DIALECT:org.hibernate.diale
 # =====================================================
 # Eureka Discovery Server
 # =====================================================
-
-# En local : http://localhost:8761/eureka/
-# Dans Docker Compose : http://discovery-server:8761/eureka/
 eureka.client.service-url.defaultZone=${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
 eureka.client.register-with-eureka=${EUREKA_CLIENT_REGISTER_WITH_EUREKA:true}
 eureka.client.fetch-registry=${EUREKA_CLIENT_FETCH_REGISTRY:true}
-
 eureka.instance.hostname=${EUREKA_INSTANCE_HOSTNAME:localhost}
 eureka.instance.prefer-ip-address=${EUREKA_INSTANCE_PREFER_IP_ADDRESS:false}
 
 # =====================================================
 # Gestion des erreurs
 # =====================================================
-
 server.error.include-message=${SERVER_ERROR_INCLUDE_MESSAGE:always}
 
 # =====================================================
-# Resilience4j - Circuit Breaker pour fleet-service
+# Resilience4j - appels vers collection-service
 # =====================================================
-
 resilience4j.circuitbreaker.instances.collectionservice.register-health-indicator=true
 resilience4j.circuitbreaker.instances.collectionservice.sliding-window-type=COUNT_BASED
 resilience4j.circuitbreaker.instances.collectionservice.sliding-window-size=5
@@ -72,6 +45,78 @@ resilience4j.circuitbreaker.instances.collectionservice.wait-duration-in-open-st
 resilience4j.circuitbreaker.instances.collectionservice.permitted-number-of-calls-in-half-open-state=2
 resilience4j.circuitbreaker.instances.collectionservice.automatic-transition-from-open-to-half-open-enabled=true
 
-# Délai maximal d’un appel Feign vers collection-service
-spring.cloud.openfeign.client.config.collectionservice.connect-timeout=2000
-spring.cloud.openfeign.client.config.collectionservice.read-timeout=3000
+# Timeouts Feign pour collection-service
+spring.cloud.openfeign.client.config.collection-service.connect-timeout=2000
+spring.cloud.openfeign.client.config.collection-service.read-timeout=3000
+
+# =====================================================
+# OAuth2 Resource Server - validation des tokens Keycloak reçus
+# =====================================================
+spring.security.oauth2.resourceserver.jwt.issuer-uri=${OAUTH2_ISSUER_URI:http://localhost:8080/realms/milkcenter}
+
+# =====================================================
+# OAuth2 Client - identité technique de invoicing-service
+# =====================================================
+spring.security.oauth2.client.registration.service-client.provider=keycloak
+spring.security.oauth2.client.registration.service-client.client-id=${OAUTH2_CLIENT_ID:milkcenter-invoicing-service}
+spring.security.oauth2.client.registration.service-client.client-secret=${OAUTH2_CLIENT_SECRET:********************}
+
+spring.security.oauth2.client.registration.service-client.authorization-grant-type=client_credentials
+spring.security.oauth2.client.registration.service-client.scope=${OAUTH2_CLIENT_SCOPE:milkcenter.read}
+
+spring.security.oauth2.client.provider.keycloak.token-uri=${OAUTH2_TOKEN_URI:http://localhost:8080/realms/milkcenter/protocol/openid-connect/token}
+
+# =====================================================
+# OAuth2 pour OpenFeign
+# =====================================================
+spring.cloud.openfeign.oauth2.enabled=false
+
+spring.cloud.openfeign.oauth2.client-registration-id=service-client
+
+
+# =====================================================
+# Kafka - connexion et consumer
+# =====================================================
+spring.kafka.bootstrap-servers=${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+spring.kafka.consumer.group-id=invoicing-service-group
+spring.kafka.consumer.auto-offset-reset=earliest
+spring.kafka.consumer.enable-auto-commit=false
+spring.kafka.listener.ack-mode=record
+
+spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
+spring.kafka.consumer.properties[spring.json.trusted.packages]=org.milkcenter.invoicingservice.event
+spring.kafka.consumer.properties[spring.json.use.type.headers]=false
+spring.kafka.consumer.properties[spring.json.value.default.type]=org.milkcenter.invoicingservice.event.MilkCollectionStatusChangedEvent
+
+# =====================================================
+# Kafka - producer des événements de notification
+# =====================================================
+# Obligatoire : les événements InvoiceCreatedEvent et
+# InvoiceLineAddedEvent sont des objets Java sérialisés en JSON.
+spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer
+spring.kafka.producer.properties.spring.json.add.type.headers=false
+
+# =====================================================
+# Topics Kafka
+# =====================================================
+app.kafka.topics.milk-collection-events=milk-collection-events
+app.kafka.topics.invoice-notifications=invoice-notification-events
+app.kafka.topics.invoice-line-notifications=invoice-line-notification-events
+app.kafka.topics.invoice-processing-reminders=invoice-processing-reminder-events
+app.kafka.topics.invoice-processed=invoice-processed-events
+app.kafka.topics.invoice-cancelled=invoice-cancelled-events
+
+
+
+# =====================================================
+# Logs Kafka
+# =====================================================
+logging.level.org.springframework.kafka=INFO
+logging.level.org.springframework.kafka.listener=INFO
+logging.level.org.springframework.kafka.support=INFO
+
+#spring.profiles.active=scheduler-test
+
+
