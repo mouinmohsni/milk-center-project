@@ -13,6 +13,9 @@ target/
 *.iws
 *.iml
 *.ipr
+# Fichiers binaires et artefacts générés
+*.jar
+*.war
 
 ### Eclipse ###
 .apt_generated

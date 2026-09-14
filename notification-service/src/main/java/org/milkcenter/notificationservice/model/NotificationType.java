@@ -1,0 +1,13 @@
+package org.milkcenter.notificationservice.model;
+
+public enum NotificationType {
+    INVOICE_CREATED,
+    INVOICE_LINE_ADDED,
+    INVOICE_PROCESSING_REMINDER,
+    INVOICE_PROCESSED,
+    INVOICE_CANCELLED,
+    COLLECTION_CORRECTED,
+    COLLECTION_REJECTED,
+    COLLECTION_ACCEPTED,
+    COLLECTION_CANCELLED
+}
